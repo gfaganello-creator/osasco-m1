@@ -240,7 +240,7 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
     <div class="kpi c-amber"><div class="kpi-label">Aten&ccedil;&atilde;o</div><div class="kpi-val" id="kpi-at">&mdash;</div></div>
     <div class="kpi c-red"><div class="kpi-label">Risco</div><div class="kpi-val" id="kpi-ri">&mdash;</div></div>
     <div class="kpi c-slate"><div class="kpi-label">Score M&eacute;dio</div><div class="kpi-val" id="kpi-score">&mdash;</div></div>
-    <div class="kpi c-gold"><div class="kpi-label">Pr&oacute;x. Jogo</div><div class="kpi-val" id="kpi-jogo">&mdash;</div></div>
+    <div class="kpi c-gold"><div class="kpi-label" title="Aguardando calend&aacute;rio quando sem dados">Pr&oacute;x. Jogo</div><div class="kpi-val" id="kpi-jogo">&mdash;</div></div>
   </div>
 
   <div class="jogo-alert hidden" id="jogo-alert">
@@ -322,7 +322,7 @@ var dtState = {
 var DT_API_KEY  = 'live_14e70fe96049615c1c7760495ede62';
 var DT_API_BASE = 'https://api.api-futebol.com.br/v1';
 var DT_OSASCO_TID = 52;
-var DT_CAMP_ID    = 10;  // Paulista A2 2026
+var DT_CAMP_ID    = 40;  // Campeonato Paulista A2  // Paulista A2 2026
 
 // Retorna dias inteiros até o próximo jogo (0 = hoje, null = não encontrado)
 function calcularDiasProxJogo() {
@@ -335,12 +335,11 @@ function calcularDiasProxJogo() {
   return diff >= 0 ? diff : null;
 }
 
-// Formata o label do KPI (D-3, D-1, HOJE, --)
+// Formata o label do KPI
 function labelDiasJogo(d) {
-  if (d === null) return '--';
-  if (d === 0)    return 'HOJE';
-  if (d <= 7)     return 'D-' + d;
-  return '--';
+  if (d === null || d === undefined) return 'Ag. cal.';
+  if (d === 0)  return 'HOJE';
+  return 'D-' + d;
 }
 
 // Busca o próximo jogo via proxy Google Apps Script (resolve CORS)
@@ -382,7 +381,7 @@ function atualizarKPIsProxJogo() {
   if (proxEl) {
     proxEl.textContent = dtState.adversario
       ? 'Pr\u00F3ximo jogo: Osasco Sporting vs ' + dtState.adversario
-      : '';
+      : 'Aguardando calend\u00E1rio da pr\u00F3xima competi\u00E7\u00E3o';
   }
 
   var alertEl = document.getElementById('jogo-alert');
@@ -716,7 +715,7 @@ function processarDados(nspData, desempRows, mapeamento) {
   if (proxEl) {
     proxEl.textContent = dtState.adversario
       ? 'Pr\u00F3ximo jogo: Osasco Sporting vs ' + dtState.adversario
-      : '';
+      : 'Aguardando calend\u00E1rio da pr\u00F3xima competi\u00E7\u00E3o';
   }
   const alertEl = document.getElementById('jogo-alert');
   if (dpj !== null && dpj <= 3) {
