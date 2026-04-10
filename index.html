@@ -444,6 +444,7 @@ async function fetchSheetCSV(url) {
 }
 
 function parseCSV(txt) {
+  if (!txt || typeof txt !== 'string') return [];
   var rows = [], row = [], cell = '', insideQuotes = false;
   for (var i = 0; i < txt.length; i++) {
     var ch = txt[i], nx = txt[i+1];
@@ -1049,20 +1050,36 @@ async function iniciar() {
     var NSP = function(aba) { return urlSheet(NSP_SID, aba); };
     var DES = function(aba) { return urlSheet(DESEMP_SID, aba); };
 
-    console.log('[M1] Iniciando fetch das 6 abas + API Futebol...');
+    // Log das URLs exatas para debug
+    console.log('[M1] URLs que serao buscadas:');
+    console.log('  Cadastro:', NSP('Cadastro'));
+    console.log('  Recuperacao:', NSP('BD Recuperação e Prontidão'));
+    console.log('  Pre Treino:', NSP('Pré Treino'));
+    console.log('  BD Carga:', NSP('BD Controle de Carga'));
+    console.log('  Desempenho:', DES('Desempenho Individual'));
+    console.log('  Mapeamento:', DES('Mapeamento'));
 
-    // Busca próximo jogo em paralelo com as planilhas (não bloqueia se falhar)
+    // Busca planilhas em paralelo
     var resultados = await Promise.allSettled([
       fetchSheetCSV(NSP('Cadastro')),
-      fetchSheetCSV(NSP('BD Recupera\u00E7\u00E3o e Prontid\u00E3o')),
-      fetchSheetCSV(NSP('Pr\u00E9 Treino')),
+      fetchSheetCSV(NSP('BD Recuperação e Prontidão')),
+      fetchSheetCSV(NSP('Pré Treino')),
       fetchSheetCSV(NSP('BD Controle de Carga')),
       fetchSheetCSV(DES('Desempenho Individual')),
-      fetchSheetCSV(DES('Mapeamento')),
-      fetchProximoJogo()  // index 6 — falha silenciosa
+      fetchSheetCSV(DES('Mapeamento'))
     ]);
 
-    var nomes = ['Cadastro','BD Recuperacao','Pre Treino','BD Carga','Desempenho','Mapeamento','API Futebol'];
+    // Busca próximo jogo separadamente para não contaminar os resultados das planilhas
+    fetchProximoJogo().catch(function() {});
+
+    var nomes = ['Cadastro','BD Recuperacao','Pre Treino','BD Carga','Desempenho','Mapeamento'];
+    resultados.forEach(function(r, i) {
+      if (r.status === 'fulfilled') {
+        console.log('[M1] OK:', nomes[i], '(' + (r.value||'').length + ' chars)');
+      } else {
+        console.error('[M1] FALHOU:', nomes[i], r.reason && r.reason.message ? r.reason.message : r.reason);
+      }
+    });
     resultados.forEach(function(r, i) {
       if (r.status === 'fulfilled') {
         console.log('[M1] OK:', nomes[i], '(' + r.value.length + ' chars)');
@@ -1073,13 +1090,18 @@ async function iniciar() {
 
     // Ignora falha do índice 6 (API Futebol — fallback silencioso)
     var planilhas = resultados.slice(0, 6);
-    var temErro = planilhas.some(function(r) { return r.status === 'rejected'; });
+    // Verifica se as 4 abas essenciais (Cadastro, Recuperação, Pré Treino, Carga) carregaram
+    var essenciais = planilhas.slice(0, 4);
+    var temErro = essenciais.some(function(r) { return r.status === 'rejected'; });
     if (temErro) {
-      var erros = planilhas.filter(function(r) { return r.status === 'rejected'; });
-      throw new Error('Falha em ' + erros.length + ' aba(s). Verifique o console.');
+      var erros = essenciais.filter(function(r) { return r.status === 'rejected'; });
+      throw new Error('Falha em ' + erros.length + ' aba(s) essenciais. Verifique as permissões das planilhas.');
     }
 
-    var results = planilhas.map(function(r) { return r.value; });
+    // Abas opcionais (Desempenho, Mapeamento) — falha silenciosa
+    var results = planilhas.map(function(r) {
+      return r.status === 'fulfilled' ? r.value : '';
+    });
 
     var txtCadastro    = results[0];
     var txtRecuperacao = results[1];
