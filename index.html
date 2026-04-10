@@ -347,8 +347,9 @@ function labelDiasJogo(d) {
 async function fetchProximoJogo() {
   var PROX_URL = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
   try {
-    var res = await fetch(PROX_URL);
+    var res = await fetch(PROX_URL, { redirect: 'follow' });
     if (!res.ok) throw new Error('Proxy status ' + res.status);
+    console.log('[M1] Proxy respondeu:', res.status, res.url);
     var data = await res.json();
     if (data.erro) throw new Error(data.erro);
     var dataJogo = new Date(data.data);
