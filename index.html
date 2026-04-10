@@ -343,61 +343,28 @@ function labelDiasJogo(d) {
   return '--';
 }
 
-// Busca o próximo jogo do Osasco na API Futebol
+// Busca o próximo jogo via proxy Google Apps Script (resolve CORS)
 async function fetchProximoJogo() {
+  var PROX_URL = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
   try {
-    var url = DT_API_BASE + '/campeonatos/' + DT_CAMP_ID + '/partidas?time_id=' + DT_OSASCO_TID;
-    var res = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + DT_API_KEY }
-    });
-    if (!res.ok) throw new Error('API status ' + res.status);
+    var res = await fetch(PROX_URL);
+    if (!res.ok) throw new Error('Proxy status ' + res.status);
     var data = await res.json();
-
-    var partidas = data.partidas || data || [];
-    var agora = new Date();
-
-    // Filtra apenas partidas futuras com data definida
-    var futuras = partidas.filter(function(p) {
-      var dt = p.data_realizacao || p.data || '';
-      if (!dt) return false;
-      var d = new Date(dt);
-      return !isNaN(d) && d >= agora;
-    });
-
-    // Ordena pela mais próxima
-    futuras.sort(function(a, b) {
-      return new Date(a.data_realizacao || a.data) - new Date(b.data_realizacao || b.data);
-    });
-
-    if (!futuras.length) {
-      console.log('[M1] API Futebol: nenhuma partida futura encontrada');
-      return null;
-    }
-
-    var prox = futuras[0];
-    var dataJogo = new Date(prox.data_realizacao || prox.data);
-
-    // Identifica o adversário
-    var mandante  = (prox.time_mandante  || prox.mandante  || {});
-    var visitante = (prox.time_visitante || prox.visitante || {});
-    var nomeMand  = mandante.nome_popular  || mandante.nome  || '';
-    var nomeVis   = visitante.nome_popular || visitante.nome || '';
-    var adversario = (mandante.id == DT_OSASCO_TID || mandante.time_id == DT_OSASCO_TID)
-      ? nomeVis : nomeMand;
-
+    if (data.erro) throw new Error(data.erro);
+    var dataJogo = new Date(data.data);
+    if (isNaN(dataJogo.getTime())) throw new Error('Data invalida');
     dtState.proxJogo      = dataJogo;
-    dtState.adversario    = adversario || 'Adversário';
-    dtState.diasRestantes = calcularDiasProxJogo();
-
-    console.log('[M1] Próximo jogo:', adversario, 'em', dataJogo.toLocaleDateString('pt-BR'),
-                '— D-' + dtState.diasRestantes);
+    dtState.adversario    = data.adversario || 'Adversário';
+    dtState.diasRestantes = (data.diasRestantes !== null && data.diasRestantes !== undefined)
+      ? data.diasRestantes : calcularDiasProxJogo();
+    console.log('[M1] Próximo jogo:', dtState.adversario,
+      'em', dataJogo.toLocaleDateString('pt-BR'),
+      'D-' + dtState.diasRestantes,
+      data.local ? '(' + data.local + ')' : '');
     return { data: dataJogo, adversario: dtState.adversario };
-
   } catch (err) {
     console.warn('[M1] fetchProximoJogo falhou (fallback ativo):', err.message);
-    dtState.proxJogo      = null;
-    dtState.adversario    = null;
-    dtState.diasRestantes = null;
+    dtState.proxJogo = null; dtState.adversario = null; dtState.diasRestantes = null;
     return null;
   }
 }
