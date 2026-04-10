@@ -361,11 +361,39 @@ async function fetchProximoJogo() {
       'em', dataJogo.toLocaleDateString('pt-BR'),
       'D-' + dtState.diasRestantes,
       data.local ? '(' + data.local + ')' : '');
+    // Atualiza KPI e alerta com os dados reais
+    atualizarKPIsProxJogo();
     return { data: dataJogo, adversario: dtState.adversario };
   } catch (err) {
     console.warn('[M1] fetchProximoJogo falhou (fallback ativo):', err.message);
     dtState.proxJogo = null; dtState.adversario = null; dtState.diasRestantes = null;
     return null;
+  }
+}
+
+// Atualiza apenas os elementos relacionados ao próximo jogo
+function atualizarKPIsProxJogo() {
+  var dpj = calcularDiasProxJogo();
+  var kpiEl = document.getElementById('kpi-jogo');
+  if (kpiEl) kpiEl.textContent = labelDiasJogo(dpj);
+
+  var proxEl = document.getElementById('prox-jogo-label');
+  if (proxEl) {
+    proxEl.textContent = dtState.adversario
+      ? 'Pr\u00F3ximo jogo: Osasco Sporting vs ' + dtState.adversario
+      : '';
+  }
+
+  var alertEl = document.getElementById('jogo-alert');
+  if (!alertEl) return;
+  if (dpj !== null && dpj <= 3) {
+    var dpjLabel = dpj === 0 ? 'HOJE' : 'em ' + dpj + ' dia' + (dpj > 1 ? 's' : '');
+    var advLabel = dtState.adversario ? ' contra ' + dtState.adversario : '';
+    document.getElementById('jogo-alert-msg').innerHTML =
+      '<strong>Jogo ' + dpjLabel + advLabel + '</strong> \u2014 Verifique os atletas em Aten\u00E7\u00E3o antes de definir a escala\u00E7\u00E3o.';
+    alertEl.classList.remove('hidden');
+  } else {
+    alertEl.classList.add('hidden');
   }
 }
 
