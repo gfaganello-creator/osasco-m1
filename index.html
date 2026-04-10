@@ -231,6 +231,7 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
     <div class="page-eyebrow">Plataforma de Alta Performance &middot; M1</div>
     <div class="page-title">Status de Performance do Elenco</div>
     <div class="page-date"><span id="hdr-sub">Carregando dados&hellip;</span></div>
+  <div id="prox-jogo-label" style="font-size:11px;color:#888;letter-spacing:.5px;margin-top:3px;min-height:16px"></div>
   </div>
 
   <div class="kpi-row" id="kpi-strip">
@@ -310,8 +311,96 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
 const NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 const DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
 
-// Simula a API Futebol -- substituir por dtState.proxJogo quando integrado
-const DIAS_PROX_JOGO = 3;
+// Estado do próximo jogo — preenchido por fetchProximoJogo()
+var dtState = {
+  proxJogo:   null,   // Date
+  adversario: null,   // string
+  diasRestantes: null // number
+};
+
+// API Futebol
+var DT_API_KEY  = 'live_14e70fe96049615c1c7760495ede62';
+var DT_API_BASE = 'https://api.api-futebol.com.br/v1';
+var DT_OSASCO_TID = 52;
+var DT_CAMP_ID    = 10;  // Paulista A2 2026
+
+// Retorna dias inteiros até o próximo jogo (0 = hoje, null = não encontrado)
+function calcularDiasProxJogo() {
+  if (!dtState.proxJogo) return null;
+  var hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  var jogo = new Date(dtState.proxJogo);
+  jogo.setHours(0, 0, 0, 0);
+  var diff = Math.round((jogo - hoje) / 86400000);
+  return diff >= 0 ? diff : null;
+}
+
+// Formata o label do KPI (D-3, D-1, HOJE, --)
+function labelDiasJogo(d) {
+  if (d === null) return '--';
+  if (d === 0)    return 'HOJE';
+  if (d <= 7)     return 'D-' + d;
+  return '--';
+}
+
+// Busca o próximo jogo do Osasco na API Futebol
+async function fetchProximoJogo() {
+  try {
+    var url = DT_API_BASE + '/campeonatos/' + DT_CAMP_ID + '/partidas?time_id=' + DT_OSASCO_TID;
+    var res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + DT_API_KEY }
+    });
+    if (!res.ok) throw new Error('API status ' + res.status);
+    var data = await res.json();
+
+    var partidas = data.partidas || data || [];
+    var agora = new Date();
+
+    // Filtra apenas partidas futuras com data definida
+    var futuras = partidas.filter(function(p) {
+      var dt = p.data_realizacao || p.data || '';
+      if (!dt) return false;
+      var d = new Date(dt);
+      return !isNaN(d) && d >= agora;
+    });
+
+    // Ordena pela mais próxima
+    futuras.sort(function(a, b) {
+      return new Date(a.data_realizacao || a.data) - new Date(b.data_realizacao || b.data);
+    });
+
+    if (!futuras.length) {
+      console.log('[M1] API Futebol: nenhuma partida futura encontrada');
+      return null;
+    }
+
+    var prox = futuras[0];
+    var dataJogo = new Date(prox.data_realizacao || prox.data);
+
+    // Identifica o adversário
+    var mandante  = (prox.time_mandante  || prox.mandante  || {});
+    var visitante = (prox.time_visitante || prox.visitante || {});
+    var nomeMand  = mandante.nome_popular  || mandante.nome  || '';
+    var nomeVis   = visitante.nome_popular || visitante.nome || '';
+    var adversario = (mandante.id == DT_OSASCO_TID || mandante.time_id == DT_OSASCO_TID)
+      ? nomeVis : nomeMand;
+
+    dtState.proxJogo      = dataJogo;
+    dtState.adversario    = adversario || 'Adversário';
+    dtState.diasRestantes = calcularDiasProxJogo();
+
+    console.log('[M1] Próximo jogo:', adversario, 'em', dataJogo.toLocaleDateString('pt-BR'),
+                '— D-' + dtState.diasRestantes);
+    return { data: dataJogo, adversario: dtState.adversario };
+
+  } catch (err) {
+    console.warn('[M1] fetchProximoJogo falhou (fallback ativo):', err.message);
+    dtState.proxJogo      = null;
+    dtState.adversario    = null;
+    dtState.diasRestantes = null;
+    return null;
+  }
+}
 
 /* =========================
    HELPERS
@@ -565,7 +654,7 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
   // -- SCORE + OVERRIDES -----------------------------------------
   let score = A + B + C + D;
   const alertas = [];
-  const dpj = DIAS_PROX_JOGO;
+  const dpj = (dtState && dtState.diasRestantes !== null) ? dtState.diasRestantes : 3;
 
   if (tipoStatus === 'reab') {
     score = Math.min(score, 25);
@@ -624,11 +713,20 @@ function processarDados(nspData, desempRows, mapeamento) {
   document.getElementById('hdr-sub').textContent = `${dadosAtletas.length} atletas \u00B7 ${new Date().toLocaleDateString('pt-BR')}`;
   document.getElementById('footer-ts').textContent = `\u00DAltima atualiza\u00E7\u00E3o: ${new Date().toLocaleString('pt-BR')}`;
 
-  const dpj = DIAS_PROX_JOGO;
+  const dpj = calcularDiasProxJogo();
+  // Atualiza header com adversário
+  var proxEl = document.getElementById('prox-jogo-label');
+  if (proxEl) {
+    proxEl.textContent = dtState.adversario
+      ? 'Pr\u00F3ximo jogo: Osasco Sporting vs ' + dtState.adversario
+      : '';
+  }
   const alertEl = document.getElementById('jogo-alert');
-  if (dpj <= 3) {
+  if (dpj !== null && dpj <= 3) {
+    var dpjLabel = dpj === 0 ? 'HOJE' : 'em ' + dpj + ' dia' + (dpj > 1 ? 's' : '');
+    var advLabel = dtState.adversario ? ' contra ' + dtState.adversario : '';
     document.getElementById('jogo-alert-msg').innerHTML =
-      `<strong>Jogo em ${dpj} dia${dpj > 1 ? 's' : ''}</strong> \u2014 Verifique os atletas em Aten\u00E7\u00E3o antes de definir a escala\u00E7\u00E3o.`;
+      '<strong>Jogo ' + dpjLabel + advLabel + '</strong> \u2014 Verifique os atletas em Aten\u00E7\u00E3o antes de definir a escala\u00E7\u00E3o.';
     alertEl.classList.remove('hidden');
   } else {
     alertEl.classList.add('hidden');
@@ -715,7 +813,8 @@ function atualizarKPIs() {
   document.getElementById('kpi-at').textContent    = at;
   document.getElementById('kpi-ri').textContent    = ri;
   document.getElementById('kpi-score').textContent = avgScore;
-  document.getElementById('kpi-jogo').textContent  = DIAS_PROX_JOGO <= 7 ? `D-${DIAS_PROX_JOGO}` : '\u2014';
+  var _dpj = calcularDiasProxJogo();
+  document.getElementById('kpi-jogo').textContent = labelDiasJogo(_dpj);
 }
 
 function renderTabela() {
@@ -950,20 +1049,20 @@ async function iniciar() {
     var NSP = function(aba) { return urlSheet(NSP_SID, aba); };
     var DES = function(aba) { return urlSheet(DESEMP_SID, aba); };
 
-    console.log('[M1] Iniciando fetch das 6 abas...');
-    console.log('[M1] NSP URL exemplo:', NSP('Cadastro'));
-    console.log('[M1] DESEMP URL exemplo:', DES('Mapeamento'));
+    console.log('[M1] Iniciando fetch das 6 abas + API Futebol...');
 
+    // Busca próximo jogo em paralelo com as planilhas (não bloqueia se falhar)
     var resultados = await Promise.allSettled([
       fetchSheetCSV(NSP('Cadastro')),
       fetchSheetCSV(NSP('BD Recupera\u00E7\u00E3o e Prontid\u00E3o')),
       fetchSheetCSV(NSP('Pr\u00E9 Treino')),
       fetchSheetCSV(NSP('BD Controle de Carga')),
       fetchSheetCSV(DES('Desempenho Individual')),
-      fetchSheetCSV(DES('Mapeamento'))
+      fetchSheetCSV(DES('Mapeamento')),
+      fetchProximoJogo()  // index 6 — falha silenciosa
     ]);
 
-    var nomes = ['Cadastro','BD Recuperacao','Pre Treino','BD Carga','Desempenho','Mapeamento'];
+    var nomes = ['Cadastro','BD Recuperacao','Pre Treino','BD Carga','Desempenho','Mapeamento','API Futebol'];
     resultados.forEach(function(r, i) {
       if (r.status === 'fulfilled') {
         console.log('[M1] OK:', nomes[i], '(' + r.value.length + ' chars)');
@@ -972,13 +1071,15 @@ async function iniciar() {
       }
     });
 
-    var temErro = resultados.some(function(r) { return r.status === 'rejected'; });
+    // Ignora falha do índice 6 (API Futebol — fallback silencioso)
+    var planilhas = resultados.slice(0, 6);
+    var temErro = planilhas.some(function(r) { return r.status === 'rejected'; });
     if (temErro) {
-      var erros = resultados.filter(function(r) { return r.status === 'rejected'; });
+      var erros = planilhas.filter(function(r) { return r.status === 'rejected'; });
       throw new Error('Falha em ' + erros.length + ' aba(s). Verifique o console.');
     }
 
-    var results = resultados.map(function(r) { return r.value; });
+    var results = planilhas.map(function(r) { return r.value; });
 
     var txtCadastro    = results[0];
     var txtRecuperacao = results[1];
