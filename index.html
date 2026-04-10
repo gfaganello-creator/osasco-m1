@@ -458,6 +458,12 @@ function setTableState(state, msg) {
 // ====================================================================
 //  4. C\u00C1LCULO DO SCORE M1
 // ====================================================================
+
+var dadosAtletas = [];
+var filtroAtual  = 'todos';
+var sortCol      = 'score';
+var sortDir      = -1;
+
 function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows, mapeamento) {
   const nNome = normalizarNome(atletaNome);
 
@@ -834,8 +840,21 @@ function sortBy(col) {
 // -- Override renderTabela: gauge circular -------------------------
 renderTabela = function() {
   const busca = (document.getElementById('search-input').value || '').toLowerCase();
+  // Normalize filtroAtual for comparison
+  const filtroNorm = (filtroAtual || 'todos').toLowerCase().trim();
   let lista = dadosAtletas.filter(a => {
-    if (filtroAtual !== 'todos' && a.classe !== filtroAtual) return false;
+    if (filtroNorm !== 'todos') {
+      const classeNorm = (a.classe || '').toLowerCase().trim();
+      const filtroCompare = filtroNorm
+        .replace('aten\u00E7\u00E3o', 'aten')
+        .replace('atencao', 'aten')
+        .replace('aten\u00E7ao', 'aten');
+      const classeCompare = classeNorm
+        .replace('aten\u00E7\u00E3o', 'aten')
+        .replace('atencao', 'aten')
+        .replace('aten\u00E7ao', 'aten');
+      if (filtroCompare !== classeCompare) return false;
+    }
     if (busca && !a.nome.toLowerCase().includes(busca) && !a.posicao.toLowerCase().includes(busca)) return false;
     return true;
   });
