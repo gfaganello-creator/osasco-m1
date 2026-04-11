@@ -928,7 +928,7 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
 
   // -- SCORE + OVERRIDES -----------------------------------------
   let score = A + B + C + D;
-  const alertas = [];
+  let alertas = [];
   const dpj = (dtState && dtState.diasRestantes !== null) ? dtState.diasRestantes : 3;
 
   if (tipoStatus === 'reab') {
