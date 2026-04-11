@@ -1385,19 +1385,19 @@ async function iniciar() {
     });
 
     // Ignora falha do índice 6 (API Futebol — fallback silencioso)
-    var planilhas = resultados.slice(0, 6);
-    // Verifica se as 4 abas essenciais (Cadastro, Recuperação, Pré Treino, Carga) carregaram
-    var essenciais = planilhas.slice(0, 4);
-    var temErro = essenciais.some(function(r) { return r.status === 'rejected'; });
-    if (temErro) {
-      var erros = essenciais.filter(function(r) { return r.status === 'rejected'; });
-      throw new Error('Falha em ' + erros.length + ' aba(s) essenciais. Verifique as permiss\u00f5es das planilhas.');
-    }
-
-    // Abas opcionais (Desempenho, Mapeamento) — falha silenciosa
-    var results = planilhas.map(function(r) {
+    // Extrai resultados de forma tolerante a falhas por aba
+    var results = resultados.map(function(r) {
       return r.status === 'fulfilled' ? r.value : '';
     });
+
+    // Verifica se Cadastro carregou (essencial para ter o roster)
+    if (!results[0] || results[0].trim() === '') {
+      throw new Error('Planilha Cadastro n\u00e3o acess\u00edvel. Verifique: planilha p\u00fablica? NSP_SID correto?');
+    }
+
+    // Debug: log status de cada aba no console
+    var _abas=['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico'];
+    resultados.forEach(function(r,i){r.status==='fulfilled'?console.log('[M1]\u2713',_abas[i],r.value.length+'ch'):console.warn('[M1]\u2717',_abas[i],r.reason&&r.reason.message);});
 
     var txtCadastro    = results[0];
     var txtRecuperacao = results[1];
@@ -1414,7 +1414,7 @@ async function iniciar() {
     var mapeamento  = parseCSV(txtMapeamento).filter(function(r) {
       return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00E3o';
     });
-    epiRows = parseCSV(results[6] && results[6].status === 'fulfilled' ? results[6].value : '');
+    epiRows = parseCSV(resultados[6] && resultados[6].status === 'fulfilled' ? resultados[6].value : '');
     cartoes = CARTOES_MOCK;
 
     processarDados({ cadastro: cadastro, recuperacao: recuperacao, preTreino: preTreino, carga: cargaRows }, desempRows, mapeamento);
