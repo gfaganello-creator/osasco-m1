@@ -306,6 +306,14 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
   .pnav-link span.pnav-label{display:none;}
 }
 
+
+/* ── Disponibilidade badges (camada clínica + competitiva) ── */
+.disp-badge{display:inline-flex;align-items:center;font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;padding:3px 7px;border-radius:4px;white-space:nowrap;}
+.disp-ok        {background:var(--ok2); color:var(--ok);}
+.disp-limitado  {background:var(--warn2);color:var(--warn);}
+.disp-reab      {background:var(--risk2);color:var(--risk);}
+.disp-suspenso  {background:var(--risk2);color:var(--risk);}
+.disp-pendurado {background:var(--gold2);color:var(--gold);}
 </style>
 </head>
 <body>
@@ -318,7 +326,7 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
         <span class="pnav-brand-sub">High Performance Platform</span>
       </div>
     </a>
-    <div class="pnav-links"><a href="../" class="pnav-link"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="pnav-label">Home</span></a><a href="./" class="pnav-link pnav-active"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="pnav-label">Elenco</span><span class="pnav-chip pnav-chip-live">LIVE</span></a><a href="../m2/" class="pnav-link"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="pnav-label">Atleta</span></a><span class="pnav-link pnav-inactive"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="pnav-label">Equipe</span><span class="pnav-chip pnav-chip-soon">Em breve</span></span><span class="pnav-link pnav-inactive"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span class="pnav-label">Scout</span><span class="pnav-chip pnav-chip-soon">Em breve</span></span></div>
+    <div class="pnav-links"><a href="../" class="pnav-link"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="pnav-label">Home</span></a><a href="./" class="pnav-link pnav-active"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="pnav-label">Elenco</span><span class="pnav-chip pnav-chip-live">LIVE</span></a><a href="../m2/" class="pnav-link"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="pnav-label">Atleta</span></a><span class="pnav-link pnav-inactive"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><a href="../m3/" class="pnav-link"><span class="pnav-label">Equipe</span></a><span class="pnav-chip pnav-chip-soon">Em breve</span></span><span class="pnav-link pnav-inactive"><svg class="pnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span class="pnav-label">Scout</span><span class="pnav-chip pnav-chip-soon">Em breve</span></span></div>
     <div class="pnav-right"><div class="sync-pill">
         <div class="sync-dot loading" id="sync-dot"></div>
         <span id="sync-label">Conectando…</span>
@@ -394,7 +402,8 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
         <th onclick="sortBy('min21')">Min 21d <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('dor')">Dor <span class="sort-arrow">&#8597;</span></th>
         <th>Alertas</th>
-        <th>Decis&atilde;o</th>
+        <th>Disponib.</th>
+          <th>Decis&atilde;o</th>
       </tr></thead>
       <tbody id="m1-tbody"></tbody>
     </table>
@@ -415,8 +424,170 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
 // ====================================================================
 const NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 const DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
+const EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
+var CARTOES_MOCK = [
+  // Preencher com dados reais do campeonato:
+  // { nome:'Nome Completo', amarelos:2, vermelhos:0, suspenso:false, pendurado:true },
+];
+var epiRows = [];   // preenchido em runtime pelo fetch
+var cartoes = [];   // preenchido em runtime
+
 
 // Estado do próximo jogo — preenchido por fetchProximoJogo()
+
+// ═══════════════════════════════════════════════════════════════════════
+// UTILS — Camada Clínica + Competitiva  (compartilhado M1/M2/M3)
+// ═══════════════════════════════════════════════════════════════════════
+
+function normNome(s){
+  if(!s) return '';
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+}
+
+function parseDataFlex(s){
+  if(!s) return null;
+  s=String(s).trim();
+  var m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  var d=new Date(s); return isNaN(d)?null:d;
+}
+
+function diasDesdeData(d){
+  if(!d) return null;
+  var t=d instanceof Date?d.getTime():(parseDataFlex(d)||{getTime:function(){return Date.now();}}).getTime();
+  return Math.floor((Date.now()-t)/86400000);
+}
+
+var EPI_COL_ALIASES={
+  nome:                  ['nome','atleta','jogador','player'],
+  status:                ['status','situacao','situa\u00e7\u00e3o','condi\u00e7\u00e3o','disponibilidade'],
+  tipo_lesao:            ['tipo_lesao','tipo de les\u00e3o','lesao','les\u00e3o','diagnostico','diagn\u00f3stico'],
+  data_lesao:            ['data_lesao','data les\u00e3o','data da les\u00e3o','inicio','in\u00edcio'],
+  data_retorno_prevista: ['data_retorno_prevista','retorno previsto','prev retorno','data prev'],
+  data_retorno_real:     ['data_retorno_real','retorno real','data retorno','retornou em'],
+};
+
+function mapEpiRow(row){
+  var r={}, keys=Object.keys(row).map(function(k){return{orig:k,norm:normNome(k)};});
+  Object.keys(EPI_COL_ALIASES).forEach(function(field){
+    var aliases=EPI_COL_ALIASES[field].map(normNome);
+    var match=keys.find(function(k){return aliases.some(function(a){return k.norm.includes(a)||a.includes(k.norm);});});
+    r[field]=match?(row[match.orig]||'').trim():'';
+  });
+  return r;
+}
+
+function classifyEpi(raw){
+  var s=normNome(raw);
+  if(!s) return 'disponivel';
+  if(s.includes('reab')||s.includes('les')||s.includes('indisponivel')||s.includes('afastado')) return 'reabilitacao';
+  if(s.includes('limit')||s.includes('restrit')||s.includes('parcial')||s.includes('transi')) return 'limitado';
+  return 'disponivel';
+}
+
+function isMuscular(tipoLesao){
+  var s=normNome(tipoLesao);
+  return s.includes('muscul')||s.includes('coxa')||s.includes('posteriores')||
+         s.includes('biceps')||s.includes('adutor')||s.includes('panturr')||
+         s.includes('isquio')||s.includes('sural');
+}
+
+function buildClinical(nomeAtleta, epiRows){
+  var nNome=normNome(nomeAtleta);
+  var row=(epiRows||[])
+    .map(mapEpiRow)
+    .filter(function(r){return normNome(r.nome)===nNome;})
+    .sort(function(a,b){
+      var da=parseDataFlex(a.data_lesao),db=parseDataFlex(b.data_lesao);
+      return(db?db.getTime():0)-(da?da.getTime():0);
+    })[0]||null;
+
+  if(!row) return{status:'disponivel',statusLabel:'Dispon\u00edvel',alertas:[],scoreReduction:0,bloqueio:false,tipoLesao:'',dataLesao:null,retornoPrevisto:null,retornoReal:null,diasLesao:null,diasRetReal:null};
+
+  var status=classifyEpi(row.status);
+  var dLesao=parseDataFlex(row.data_lesao);
+  var dRetPrev=parseDataFlex(row.data_retorno_prevista);
+  var dRetReal=parseDataFlex(row.data_retorno_real);
+  var diasLesao=diasDesdeData(dLesao);
+  var diasRetReal=diasDesdeData(dRetReal);
+  var muscular=isMuscular(row.tipo_lesao);
+  var alertas=[],reduction=0,bloqueio=false,statusLabel;
+
+  if(status==='reabilitacao'){
+    bloqueio=true; reduction=100; statusLabel='Reabilita\u00e7\u00e3o';
+    alertas.push({t:'danger',m:'Em reabilita\u00e7\u00e3o'});
+  } else if(status==='limitado'){
+    reduction=20; statusLabel='Limitado';
+    alertas.push({t:'warn',m:'Uso limitado'});
+  } else { statusLabel='Dispon\u00edvel'; }
+
+  if(status!=='reabilitacao'){
+    if(dRetReal&&diasRetReal!==null&&diasRetReal<=7){ reduction+=15; alertas.push({t:'warn',m:'Retorno recente ('+diasRetReal+'d)'}); }
+    if(dLesao&&diasLesao!==null&&diasLesao<=30)    { reduction+=10; alertas.push({t:'warn',m:'Les\u00e3o recente ('+diasLesao+'d)'}); }
+    if(muscular)                                   { reduction+=10; alertas.push({t:'warn',m:'Risco muscular'}); }
+  }
+  return{status,statusLabel,alertas,scoreReduction:Math.min(100,reduction),bloqueio,tipoLesao:row.tipo_lesao,dataLesao:dLesao,retornoPrevisto:dRetPrev,retornoReal:dRetReal,diasLesao,diasRetReal};
+}
+
+function buildDisciplina(nomeAtleta, cartoes){
+  var nNome=normNome(nomeAtleta);
+  var row=(cartoes||[]).find(function(c){return normNome(c.nome)===nNome;})||null;
+  if(!row) return{disponivel:true,suspenso:false,pendurado:false,amarelos:0,vermelhos:0,alertas:[],bloqueio:false};
+  var suspenso=row.suspenso===true||String(row.suspenso||'').toLowerCase()==='sim';
+  var pendurado=row.pendurado===true||String(row.pendurado||'').toLowerCase()==='sim';
+  var amarelos=parseInt(row.amarelos||0)||0, vermelhos=parseInt(row.vermelhos||0)||0;
+  var alertas=[];
+  if(suspenso)  alertas.push({t:'danger',m:'Suspenso por cart\u00f5es'});
+  if(pendurado) alertas.push({t:'warn',  m:'Pendurado ('+amarelos+' amarelos)'});
+  if(vermelhos>0&&!suspenso) alertas.push({t:'info',m:'Cart\u00e3o vermelho recente'});
+  return{disponivel:!suspenso,suspenso,pendurado,amarelos,vermelhos,alertas,bloqueio:suspenso};
+}
+
+function calcDisponibilidade(clinical, disciplina){
+  if(disciplina.suspenso)              return{status:'Suspenso',           cls:'disp-suspenso',bloqueio:true };
+  if(clinical.status==='reabilitacao') return{status:'Reabilita\u00e7\u00e3o',cls:'disp-reab',bloqueio:true };
+  if(clinical.status==='limitado')     return{status:'Limitado',           cls:'disp-limitado',bloqueio:false};
+  if(disciplina.pendurado)             return{status:'Pendurado',          cls:'disp-pendurado',bloqueio:false};
+  return                                      {status:'Dispon\u00edvel',  cls:'disp-ok',       bloqueio:false};
+}
+
+function applyOverrides(score, clinical, disciplina){
+  if(disciplina.bloqueio) return 0;
+  if(clinical.bloqueio)   return Math.min(score,25);
+  return Math.min(100,Math.max(0,score-clinical.scoreReduction));
+}
+
+function buildResumoColetivo(atletas){
+  var counts={disponiveis:0,limitados:0,reabilitacao:0,suspensos:0,pendurados:0,retornos:0};
+  var problemas={};
+  (atletas||[]).forEach(function(a){
+    var d=a._disponibilidade;
+    if(!d) return;
+    if(d.status==='Dispon\u00edvel')       counts.disponiveis++;
+    if(d.status==='Limitado')               counts.limitados++;
+    if(d.status==='Reabilita\u00e7\u00e3o') counts.reabilitacao++;
+    if(d.status==='Suspenso')               counts.suspensos++;
+    if(a._disciplina&&a._disciplina.pendurado) counts.pendurados++;
+    if(a._clinical&&a._clinical.diasRetReal!==null&&a._clinical.diasRetReal<=7) counts.retornos++;
+    var pos=(a.posicao||'').toUpperCase();
+    var setor=pos.includes('GK')||pos.includes('GOL')?'Goleiro':pos.includes('ZAG')?'Zaga':pos.includes('LAT')?'Lateral':pos.includes('VOL')?'Volante':pos.includes('MEI')?'Meia':pos.includes('EXT')?'Extremo':pos.includes('ATA')?'Ataque':'Outros';
+    if(d.bloqueio||(a._disciplina&&a._disciplina.pendurado)) problemas[setor]=(problemas[setor]||0)+1;
+  });
+  var setores=Object.entries(problemas).sort(function(a,b){return b[1]-a[1];}).slice(0,2).map(function(e){return e[0].toLowerCase();});
+  var parts=[];
+  if(counts.reabilitacao>0) parts.push(counts.reabilitacao+' em reabilita\u00e7\u00e3o');
+  if(counts.suspensos>0)    parts.push(counts.suspensos+' suspenso'+(counts.suspensos>1?'s':''));
+  if(counts.pendurados>0)   parts.push(counts.pendurados+' pendurado'+(counts.pendurados>1?'s':''));
+  if(counts.limitados>0)    parts.push(counts.limitados+' limitado'+(counts.limitados>1?'s':''));
+  if(counts.retornos>0)     parts.push(counts.retornos+' retorno recente');
+  var resumo=parts.length?parts.join(', ')+'.':'Elenco sem restri\u00e7\u00f5es cl\u00ednicas ou disciplinares.';
+  if(setores.length) resumo+=' Setores mais sens\u00edveis: '+setores.join(' e ')+'.';
+  return{counts,resumo};
+}
+
+
 var dtState = {
   proxJogo:   null,   // Date
   adversario: null,   // string
@@ -459,10 +630,10 @@ async function fetchProximoJogo() {
     var dataJogo = new Date(data.data);
     if (isNaN(dataJogo.getTime())) throw new Error('Data invalida');
     dtState.proxJogo      = dataJogo;
-    dtState.adversario    = data.adversario || 'Adversário';
+    dtState.adversario    = data.adversario || 'Advers\u00e1rio';
     dtState.diasRestantes = (data.diasRestantes !== null && data.diasRestantes !== undefined)
       ? data.diasRestantes : calcularDiasProxJogo();
-    console.log('[M1] Próximo jogo:', dtState.adversario,
+    console.log('[M1] Pr\u00f3ximo jogo:', dtState.adversario,
       'em', dataJogo.toLocaleDateString('pt-BR'),
       'D-' + dtState.diasRestantes,
       data.local ? '(' + data.local + ')' : '');
@@ -632,11 +803,11 @@ function setTableState(state, msg) {
   if (state === 'loading') {
     stateEl.style.display = '';
     tbl.style.display = 'none';
-    stateEl.innerHTML = '<div class="state-screen"><div class="spinner"></div><div class="state-title">Carregando dados</div><div class="state-sub">Buscando NSP e Arquivo 3 via Google Sheets…</div></div>';
+    stateEl.innerHTML = '<div class="state-screen"><div class="spinner"></div><div class="state-title">Carregando dados</div><div class="state-sub">Buscando NSP e Arquivo 3 via Google Sheets\u2026</div></div>';
   } else if (state === 'error') {
     stateEl.style.display = '';
     tbl.style.display = 'none';
-    stateEl.innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div class="state-title">Erro ao carregar</div><div class="state-sub">' + (msg || 'Verifique as permissões das planilhas.') + '</div><div class="state-sub" style="margin-top:8px;font-size:11px;color:#999">Se estiver abrindo como arquivo local (file://), use um servidor HTTP. Veja instruções no código.</div></div>';
+    stateEl.innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div class="state-title">Erro ao carregar</div><div class="state-sub">' + (msg || 'Verifique as permiss\u00f5es das planilhas.') + '</div><div class="state-sub" style="margin-top:8px;font-size:11px;color:#999">Se estiver abrindo como arquivo local (file://), use um servidor HTTP. Veja instru\u00e7\u00f5es no c\u00f3digo.</div></div>';
   } else if (state === 'done') {
     stateEl.style.display = 'none';
     tbl.style.display = '';
@@ -775,6 +946,18 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
   else if (dpj === 3) alertas.push({ t: 'info', m: 'Jogo em 3 dias' });
 
   score = Math.max(0, Math.min(100, score));
+  var clinical = buildClinical(atletaNome, epiRows);
+  alertas = alertas.concat(clinical.alertas);
+  score = applyOverrides(score, clinical, {bloqueio:false,scoreReduction:0,pendurado:false});
+  var disciplina = buildDisciplina(atletaNome, cartoes);
+  alertas = alertas.concat(disciplina.alertas);
+  score = applyOverrides(score, {bloqueio:false,scoreReduction:0}, disciplina);
+  var disponibilidade = calcDisponibilidade(clinical, disciplina);
+  if(disponibilidade.bloqueio){
+    classe  = 'Risco';
+    decisao = disponibilidade.status === 'Suspenso' ? 'Suspenso' : 'N\u00e3o escalar';
+  }
+
 
   // -- CLASSIFICA\u00C7\u00C3O --------------------------------------------
   let classe;
@@ -794,13 +977,19 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
     classe, decisao, alertas,
     statusLabel, tipoStatus,
     wellnessQt: qtVal, ratio: Math.round(ratio * 100) / 100,
-    min7d, min21d, pdor
+    min7d, min21d, pdor,
+    _clinical:      clinical      || null,
+    _disciplina:    disciplina    || null,
+    _disponibilidade: disponibilidade || null
   };
 }
 
 
 
-function processarDados(nspData, desempRows, mapeamento) {
+function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
+  epiRows = _epiRows || [];
+  cartoes = _cartoes || CARTOES_MOCK;
+
   const { cadastro } = nspData;
 
   dadosAtletas = cadastro.map(r => {
@@ -896,7 +1085,7 @@ function carregarDadosDemo() {
     ativo: 'Sim'
   }));
 
-  processarDados({ cadastro, recuperacao, preTreino, carga: cargaRows }, desempRows, mapeamento);
+  processarDados({ cadastro, recuperacao, preTreino, carga: cargaRows }, desempRows, mapeamento, epiRows, cartoes);
 }
 
 // ====================================================================
@@ -1115,6 +1304,7 @@ renderTabela = function() {
       '<td><span class="mono-val">' + a.min21d + "'" + '</span></td>' +
       '<td>' + dorHtml + '</td>' +
       '<td><div class="alerts-cell">' + alertsHtml + '</div></td>' +
+      '<td>' + (a._disponibilidade ? '<span class="disp-badge ' + (a._disponibilidade.cls||'disp-ok') + '">' + (a._disponibilidade.status||'Dispon\u00edvel') + '</span>' : '<span class="disp-badge disp-ok">Dispon\u00edvel</span>') + '</td>' +
       '<td><span class="' + decClass + '">' + a.decisao + '</span></td>' +
     '</tr>';
   }).join('');
@@ -1132,8 +1322,8 @@ async function iniciar() {
   // Detecta abertura como file:// e avisa
   if (window.location.protocol === 'file:') {
     setTableState('error',
-      'Você está abrindo o arquivo direto no browser (file://). ' +
-      'O Chrome bloqueia requisições externas nesse modo. ' +
+      'Voc\u00ea est\u00e1 abrindo o arquivo direto no browser (file://). ' +
+      'O Chrome bloqueia requisi\u00e7\u00f5es externas nesse modo. ' +
       'Use um servidor local: no terminal, entre na pasta do arquivo e rode: ' +
       '<code>python3 -m http.server 8080</code> ' +
       'depois acesse <a href="http://localhost:8080" target="_blank">http://localhost:8080</a>'
@@ -1158,8 +1348,8 @@ async function iniciar() {
     // Log das URLs exatas para debug
     console.log('[M1] URLs que serao buscadas:');
     console.log('  Cadastro:', NSP('Cadastro'));
-    console.log('  Recuperacao:', NSP('BD Recuperação e Prontidão'));
-    console.log('  Pre Treino:', NSP('Pré Treino'));
+    console.log('  Recuperacao:', NSP('BD Recupera\u00e7\u00e3o e Prontid\u00e3o'));
+    console.log('  Pre Treino:', NSP('Pr\u00e9 Treino'));
     console.log('  BD Carga:', NSP('BD Controle de Carga'));
     console.log('  Desempenho:', DES('Desempenho Individual'));
     console.log('  Mapeamento:', DES('Mapeamento'));
@@ -1167,11 +1357,12 @@ async function iniciar() {
     // Busca planilhas em paralelo
     var resultados = await Promise.allSettled([
       fetchSheetCSV(NSP('Cadastro')),
-      fetchSheetCSV(NSP('BD Recuperação e Prontidão')),
-      fetchSheetCSV(NSP('Pré Treino')),
+      fetchSheetCSV(NSP('BD Recupera\u00e7\u00e3o e Prontid\u00e3o')),
+      fetchSheetCSV(NSP('Pr\u00e9 Treino')),
       fetchSheetCSV(NSP('BD Controle de Carga')),
       fetchSheetCSV(DES('Desempenho Individual')),
-      fetchSheetCSV(DES('Mapeamento'))
+      fetchSheetCSV(DES('Mapeamento')),
+      fetchSheetCSV(urlSheet(EPI_SID, 'Epidemiol\u00f3gico')).catch(function(){ return ''; })
     ]);
 
     // Busca próximo jogo separadamente para não contaminar os resultados das planilhas
@@ -1200,7 +1391,7 @@ async function iniciar() {
     var temErro = essenciais.some(function(r) { return r.status === 'rejected'; });
     if (temErro) {
       var erros = essenciais.filter(function(r) { return r.status === 'rejected'; });
-      throw new Error('Falha em ' + erros.length + ' aba(s) essenciais. Verifique as permissões das planilhas.');
+      throw new Error('Falha em ' + erros.length + ' aba(s) essenciais. Verifique as permiss\u00f5es das planilhas.');
     }
 
     // Abas opcionais (Desempenho, Mapeamento) — falha silenciosa
@@ -1223,6 +1414,8 @@ async function iniciar() {
     var mapeamento  = parseCSV(txtMapeamento).filter(function(r) {
       return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00E3o';
     });
+    epiRows = parseCSV(results[6] && results[6].status === 'fulfilled' ? results[6].value : '');
+    cartoes = CARTOES_MOCK;
 
     processarDados({ cadastro: cadastro, recuperacao: recuperacao, preTreino: preTreino, carga: cargaRows }, desempRows, mapeamento);
     esconderCaixaConfig();
