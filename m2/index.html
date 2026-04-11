@@ -288,8 +288,10 @@ var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
 var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
 var PROXY_URL  = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
-var NSP_DATA   = null;
-var PROX_JOGO  = null;
+var NSP_DATA     = null;
+var PROX_JOGO    = null;
+var epiRowsM2    = [];   // preenchido por iniciarM2
+var CARTOES_MOCK = [];   // preencher com dados reais do campeonato
 
 function urlSheet(sid, aba) {
   return 'https://docs.google.com/spreadsheets/d/' + sid + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(aba);
@@ -741,187 +743,193 @@ function carregarAtleta() {
     document.getElementById('m2-content').innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="state-title">Selecione um atleta</div></div>';
     return;
   }
-  var cad = NSP_DATA.cadastro.find(function(r){return r['Nome']===nome;})||{};
-  var map = NSP_DATA.mapeamento.find(function(r){return r['nome_nsp']===nome;})||{};
-  var sc  = calcScore(nome, NSP_DATA.recuperacao, NSP_DATA.preTreino, NSP_DATA.carga);
-  // --- CAMADA CL\u00cdNICA + COMPETITIVA ---
-  var clinical      = buildClinical(nome, epiRowsM2);
-  var disciplina    = buildDisciplina(nome, CARTOES_MOCK);
-  var disponibilidade = calcDisponibilidade(clinical, disciplina);
+  try {
+    var cad = NSP_DATA.cadastro.find(function(r){return r['Nome']===nome;})||{};
+    var map = NSP_DATA.mapeamento.find(function(r){return r['nome_nsp']===nome;})||{};
+    var sc  = calcScore(nome, NSP_DATA.recuperacao, NSP_DATA.preTreino, NSP_DATA.carga);
+    // --- CAMADA CL\u00cdNICA + COMPETITIVA ---
+    var clinical      = buildClinical(nome, epiRowsM2);
+    var disciplina    = buildDisciplina(nome, CARTOES_MOCK);
+    var disponibilidade = calcDisponibilidade(clinical, disciplina);
 
-  // Override decisao if blocked
-  if(disponibilidade.bloqueio){
-    sc = Object.assign({},sc);
-    sc.decisao  = disponibilidade.status==='Suspenso'?'Suspenso':'N\u00e3o escalar';
-    sc.decType  = 'risk';
-    sc.score    = disponibilidade.status==='Suspenso'?0:Math.min(sc.score,25);
-    sc.classe   = 'Risco';
-  }
+    // Override decisao if blocked
+    if(disponibilidade.bloqueio){
+      sc = Object.assign({},sc);
+      sc.decisao  = disponibilidade.status==='Suspenso'?'Suspenso':'N\u00e3o escalar';
+      sc.decType  = 'risk';
+      sc.score    = disponibilidade.status==='Suspenso'?0:Math.min(sc.score,25);
+      sc.classe   = 'Risco';
+    }
 
 
-  // Wellness history
-  var wtRows = NSP_DATA.preTreino.filter(function(r){return (r['Nome:']||r['Nome']||'').trim()===nome;});
-  var wHist = wtRows.map(function(r) {
-    var fad=parseFloat(r['Fadiga']||'0')||0;
-    var dor=parseFloat(r['Dor']||'0')||0;
-    var hum=parseFloat(r['Humor']||'0')||0;
-    var qt=parseFloat(r['Qualidade do Sono']||r['QT']||'0')||0;
-    return {data:r['Data']||r['data']||'',fad:fad,dor:dor,hum:hum,qt:qt,
-      total:Math.round((fad*0.28+dor*0.27+hum*0.20+qt*0.25)*10)/10};
-  });
-  var recRows = NSP_DATA.recuperacao.filter(function(r){return r['Nome']===nome;});
+    // Wellness history
+    var wtRows = NSP_DATA.preTreino.filter(function(r){return (r['Nome:']||r['Nome']||'').trim()===nome;});
+    var wHist = wtRows.map(function(r) {
+      var fad=parseFloat(r['Fadiga']||'0')||0;
+      var dor=parseFloat(r['Dor']||'0')||0;
+      var hum=parseFloat(r['Humor']||'0')||0;
+      var qt=parseFloat(r['Qualidade do Sono']||r['QT']||'0')||0;
+      return {data:r['Data']||r['data']||'',fad:fad,dor:dor,hum:hum,qt:qt,
+        total:Math.round((fad*0.28+dor*0.27+hum*0.20+qt*0.25)*10)/10};
+    });
+    var recRows = NSP_DATA.recuperacao.filter(function(r){return r['Nome']===nome;});
 
-  // Scores over time (simulate from wellness history — real score per row)
-  var scoreHist = wtRows.map(function(r) {
-    var fad=parseFloat(r['Fadiga']||'0')||0;
-    var dor=parseFloat(r['Dor']||'0')||0;
-    var hum=parseFloat(r['Humor']||'0')||0;
-    var qt=parseFloat(r['Qualidade do Sono']||r['QT']||'0')||0;
-    var Braw=fad*0.28+dor*0.27+hum*0.20+qt*0.25;
-    var B=Math.round(Math.min(30,Math.max(0,Braw*6)));
-    var A=sc.A; // same NSP status for history
-    return Math.min(100,A+B+sc.C+sc.D);
-  });
+    // Scores over time (simulate from wellness history — real score per row)
+    var scoreHist = wtRows.map(function(r) {
+      var fad=parseFloat(r['Fadiga']||'0')||0;
+      var dor=parseFloat(r['Dor']||'0')||0;
+      var hum=parseFloat(r['Humor']||'0')||0;
+      var qt=parseFloat(r['Qualidade do Sono']||r['QT']||'0')||0;
+      var Braw=fad*0.28+dor*0.27+hum*0.20+qt*0.25;
+      var B=Math.round(Math.min(30,Math.max(0,Braw*6)));
+      var A=sc.A; // same NSP status for history
+      return Math.min(100,A+B+sc.C+sc.D);
+    });
 
-  var idade = calcularIdade(cad['Data de Nascimento']);
-  var pos   = map['posicao_principal']||cad['Posi\u00e7\u00e3o']||'\u2014';
-  var num   = map['numero_camisa']||cad['N\u00ba']||'';
-  var scoreColor = sc.classe==='OK'?'var(--ok)':sc.classe==='Aten\u00e7\u00e3o'?'var(--warn)':'var(--risk)';
-  var statusColor = sc.tipoStatus==='apronto'?'var(--ok)':sc.tipoStatus==='alerta'?'var(--warn)':'var(--risk)';
+    var idade = calcularIdade(cad['Data de Nascimento']);
+    var pos   = map['posicao_principal']||cad['Posi\u00e7\u00e3o']||'\u2014';
+    var num   = map['numero_camisa']||cad['N\u00ba']||'';
+    var scoreColor = sc.classe==='OK'?'var(--ok)':sc.classe==='Aten\u00e7\u00e3o'?'var(--warn)':'var(--risk)';
+    var statusColor = sc.tipoStatus==='apronto'?'var(--ok)':sc.tipoStatus==='alerta'?'var(--warn)':'var(--risk)';
 
-  // Last wellness values
-  var lastW = wHist.length?wHist[wHist.length-1]:null;
-  var fadTrend = detectTrend(wHist.map(function(w){return w.fad;}));
-  var scoreTrend = detectTrend(scoreHist);
+    // Last wellness values
+    var lastW = wHist.length?wHist[wHist.length-1]:null;
+    var fadTrend = detectTrend(wHist.map(function(w){return w.fad;}));
+    var scoreTrend = detectTrend(scoreHist);
 
-  // Próximo jogo pill
-  var jogoPill = '';
-  if (PROX_JOGO && PROX_JOGO.dias !== null) {
-    var dLabel = PROX_JOGO.dias===0?'HOJE':PROX_JOGO.dias===1?'AMANH\u00c3':'D-'+PROX_JOGO.dias;
-    jogoPill = '<div class="jogo-pill"><span class="d-badge">'+dLabel+'</span><span>vs '+PROX_JOGO.adversario+'</span></div>';
-  } else {
-    jogoPill = '<div class="jogo-pill" style="color:var(--ink3)">Ag. calend\u00e1rio</div>';
-  }
+    // Próximo jogo pill
+    var jogoPill = '';
+    if (PROX_JOGO && PROX_JOGO.dias !== null) {
+      var dLabel = PROX_JOGO.dias===0?'HOJE':PROX_JOGO.dias===1?'AMANH\u00c3':'D-'+PROX_JOGO.dias;
+      jogoPill = '<div class="jogo-pill"><span class="d-badge">'+dLabel+'</span><span>vs '+PROX_JOGO.adversario+'</span></div>';
+    } else {
+      jogoPill = '<div class="jogo-pill" style="color:var(--ink3)">Ag. calend\u00e1rio</div>';
+    }
 
-  // Decision cards
-  var decs = [
-    {type:'ok',  icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>', label:'Pronto 90min', sub:'Apto para jogo completo'},
-    {type:'warn',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', label:'Gerir minutos', sub:'45\u201370 min, monitorar'},
-    {type:'risk',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>', label:'N\u00e3o escalar', sub:'Preservar / reabilitar'}
-  ];
-  var decHtml = decs.map(function(d){
-    var active = (sc.decType===d.type);
-    var cls = 'dec-'+d.type + (active?' active-dec':' dec-inactive');
-    return '<div class="dec-card '+cls+'"><div class="dec-icon">'+d.icon+'</div><div class="dec-label">'+d.label+'</div><div class="dec-sub">'+d.sub+'</div></div>';
-  }).join('');
+    // Decision cards
+    var decs = [
+      {type:'ok',  icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>', label:'Pronto 90min', sub:'Apto para jogo completo'},
+      {type:'warn',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', label:'Gerir minutos', sub:'45\u201370 min, monitorar'},
+      {type:'risk',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>', label:'N\u00e3o escalar', sub:'Preservar / reabilitar'}
+    ];
+    var decHtml = decs.map(function(d){
+      var active = (sc.decType===d.type);
+      var cls = 'dec-'+d.type + (active?' active-dec':' dec-inactive');
+      return '<div class="dec-card '+cls+'"><div class="dec-icon">'+d.icon+'</div><div class="dec-label">'+d.label+'</div><div class="dec-sub">'+d.sub+'</div></div>';
+    }).join('');
 
-  // Labels for charts (last 10)
-  var chartLabels = wHist.slice(-10).map(function(w){return w.data||'';});
-  var fadData  = wHist.slice(-10).map(function(w){return w.fad;});
-  var dorData  = wHist.slice(-10).map(function(w){return w.dor;});
-  var qtData   = wHist.slice(-10).map(function(w){return w.qt;});
-  var scoreData= scoreHist.slice(-10);
+    // Labels for charts (last 10)
+    var chartLabels = wHist.slice(-10).map(function(w){return w.data||'';});
+    var fadData  = wHist.slice(-10).map(function(w){return w.fad;});
+    var dorData  = wHist.slice(-10).map(function(w){return w.dor;});
+    var qtData   = wHist.slice(-10).map(function(w){return w.qt;});
+    var scoreData= scoreHist.slice(-10);
 
-  document.getElementById('m2-content').innerHTML =
-    // PROFILE
-    '<div class="profile-header">' +
-      '<div class="avatar">' + nome.charAt(0).toUpperCase() + '</div>' +
-      '<div class="profile-info">' +
-        '<div class="profile-name">' + nome + '</div>' +
-        '<div class="profile-meta">' +
-          (cad['Nome Completo']?'<span class="p-tag">'+cad['Nome Completo']+'</span>':'')+
-          (pos!=='\u2014'?'<span class="p-tag">'+pos+'</span>':'')+
-          (num?'<span class="p-tag">#'+num+'</span>':'')+
-          (idade?'<span class="p-tag">'+idade+' anos</span>':'')+
-          (cad['Lateralidade']?'<span class="p-tag">'+cad['Lateralidade']+'</span>':'')+
+    document.getElementById('m2-content').innerHTML =
+      // PROFILE
+      '<div class="profile-header">' +
+        '<div class="avatar">' + nome.charAt(0).toUpperCase() + '</div>' +
+        '<div class="profile-info">' +
+          '<div class="profile-name">' + nome + '</div>' +
+          '<div class="profile-meta">' +
+            (cad['Nome Completo']?'<span class="p-tag">'+cad['Nome Completo']+'</span>':'')+
+            (pos!=='\u2014'?'<span class="p-tag">'+pos+'</span>':'')+
+            (num?'<span class="p-tag">#'+num+'</span>':'')+
+            (idade?'<span class="p-tag">'+idade+' anos</span>':'')+
+            (cad['Lateralidade']?'<span class="p-tag">'+cad['Lateralidade']+'</span>':'')+
+          '</div>' +
+        '</div>' +
+        '<div class="score-box">' +
+          '<div class="score-num" style="color:'+scoreColor+'">'+sc.score+'</div>' +
+          '<div class="score-lbl">Score M1</div>' +
+          '<div class="score-cls '+(sc.classe==='OK'?'ok':sc.classe==='Aten\u00e7\u00e3o'?'warn':'risk')+'">'+sc.classe+'</div>' +
         '</div>' +
       '</div>' +
-      '<div class="score-box">' +
-        '<div class="score-num" style="color:'+scoreColor+'">'+sc.score+'</div>' +
-        '<div class="score-lbl">Score M1</div>' +
-        '<div class="score-cls '+(sc.classe==='OK'?'ok':sc.classe==='Aten\u00e7\u00e3o'?'warn':'risk')+'">'+sc.classe+'</div>' +
+
+      // DECISION
+      '<div class="decision-section">' +
+        '<div class="decision-header">' +
+          '<div class="section-title">Decis\u00e3o de Escalona\u00e7\u00e3o</div>' +
+          jogoPill +
+        '</div>' +
+        '<div class="decision-cards">' + decHtml + '</div>' +
       '</div>' +
-    '</div>' +
 
-    // DECISION
-    '<div class="decision-section">' +
-      '<div class="decision-header">' +
-        '<div class="section-title">Decis\u00e3o de Escalona\u00e7\u00e3o</div>' +
-        jogoPill +
+      // KPIs
+      '<div class="kpi-row">' +
+        '<div class="kpi-card"><div class="kpi-label">Status NSP</div><div class="kpi-val" style="font-size:14px;font-weight:600;color:'+statusColor+'">'+(sc.status||'Sem reg.')+'</div><div class="kpi-sub">Prontid\u00e3o</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">Fadiga</div><div class="kpi-val" style="color:'+(lastW&&lastW.fad>=4?'var(--risk)':lastW&&lastW.fad>=3?'var(--warn)':'var(--ink)')+'">'+( lastW?lastW.fad.toFixed(1):'\u2014')+'</div><div class="kpi-sub trend-bar">'+trendHtml(fadTrend,'wellness')+'</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">Dor</div><div class="kpi-val" style="color:'+(lastW&&lastW.dor>=3?'var(--risk)':lastW&&lastW.dor>=2?'var(--warn)':'var(--ink)')+'">'+( lastW?lastW.dor.toFixed(1):'\u2014')+'</div><div class="kpi-sub">\u00daltimo reg.</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">QT Sono</div><div class="kpi-val">'+(lastW?lastW.qt.toFixed(1):'\u2014')+'</div><div class="kpi-sub">Qualidade</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">Humor</div><div class="kpi-val">'+(lastW?lastW.hum.toFixed(1):'\u2014')+'</div><div class="kpi-sub">Humor</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">A \u00b7 B \u00b7 C \u00b7 D</div><div class="kpi-val" style="font-size:14px">'+sc.A+'&nbsp;'+sc.B+'&nbsp;'+sc.C+'&nbsp;'+sc.D+'</div><div class="kpi-sub">Score M1</div></div>' +
       '</div>' +
-      '<div class="decision-cards">' + decHtml + '</div>' +
-    '</div>' +
 
-    // KPIs
-    '<div class="kpi-row">' +
-      '<div class="kpi-card"><div class="kpi-label">Status NSP</div><div class="kpi-val" style="font-size:14px;font-weight:600;color:'+statusColor+'">'+(sc.status||'Sem reg.')+'</div><div class="kpi-sub">Prontid\u00e3o</div></div>' +
-      '<div class="kpi-card"><div class="kpi-label">Fadiga</div><div class="kpi-val" style="color:'+(lastW&&lastW.fad>=4?'var(--risk)':lastW&&lastW.fad>=3?'var(--warn)':'var(--ink)')+'">'+( lastW?lastW.fad.toFixed(1):'\u2014')+'</div><div class="kpi-sub trend-bar">'+trendHtml(fadTrend,'wellness')+'</div></div>' +
-      '<div class="kpi-card"><div class="kpi-label">Dor</div><div class="kpi-val" style="color:'+(lastW&&lastW.dor>=3?'var(--risk)':lastW&&lastW.dor>=2?'var(--warn)':'var(--ink)')+'">'+( lastW?lastW.dor.toFixed(1):'\u2014')+'</div><div class="kpi-sub">\u00daltimo reg.</div></div>' +
-      '<div class="kpi-card"><div class="kpi-label">QT Sono</div><div class="kpi-val">'+(lastW?lastW.qt.toFixed(1):'\u2014')+'</div><div class="kpi-sub">Qualidade</div></div>' +
-      '<div class="kpi-card"><div class="kpi-label">Humor</div><div class="kpi-val">'+(lastW?lastW.hum.toFixed(1):'\u2014')+'</div><div class="kpi-sub">Humor</div></div>' +
-      '<div class="kpi-card"><div class="kpi-label">A \u00b7 B \u00b7 C \u00b7 D</div><div class="kpi-val" style="font-size:14px">'+sc.A+'&nbsp;'+sc.B+'&nbsp;'+sc.C+'&nbsp;'+sc.D+'</div><div class="kpi-sub">Score M1</div></div>' +
-    '</div>' +
-
-    // CHARTS
-    '<div class="charts-row">' +
-      '<div class="chart-card">' +
-        '<div class="chart-title">Evolu\u00e7\u00e3o do Score M1</div>' +
-        '<div class="chart-sub">\u00daltimos 10 registros &mdash; ' + trendHtml(scoreTrend,'score') + '</div>' +
-        '<canvas id="chart-score" height="150"></canvas>' +
+      // CHARTS
+      '<div class="charts-row">' +
+        '<div class="chart-card">' +
+          '<div class="chart-title">Evolu\u00e7\u00e3o do Score M1</div>' +
+          '<div class="chart-sub">\u00daltimos 10 registros &mdash; ' + trendHtml(scoreTrend,'score') + '</div>' +
+          '<canvas id="chart-score" height="150"></canvas>' +
+        '</div>' +
+        '<div class="chart-card">' +
+          '<div class="chart-title">Wellness: Fadiga, Dor e QT</div>' +
+          '<div class="chart-sub">\u00daltimos 10 registros &mdash; ' + trendHtml(fadTrend,'wellness') + '</div>' +
+          '<canvas id="chart-wellness" height="150"></canvas>' +
+        '</div>' +
       '</div>' +
-      '<div class="chart-card">' +
-        '<div class="chart-title">Wellness: Fadiga, Dor e QT</div>' +
-        '<div class="chart-sub">\u00daltimos 10 registros &mdash; ' + trendHtml(fadTrend,'wellness') + '</div>' +
-        '<canvas id="chart-wellness" height="150"></canvas>' +
-      '</div>' +
-    '</div>' +
 
-    // HISTORY TABLE
-    (wHist.length?
-    '<div class="hist-card"><div class="hist-title">Hist\u00f3rico de Wellness</div>' +
-    '<table class="hist"><thead><tr><th>Data</th><th>Fadiga</th><th>Dor</th><th>Humor</th><th>QT Sono</th><th>Total</th></tr></thead><tbody>' +
-    wHist.slice().reverse().slice(0,12).map(function(w) {
-      return '<tr><td style="font-family:var(--f-mono);font-size:11px;color:var(--ink3)">'+(w.data||'\u2014')+'</td>'+
-        '<td style="color:'+(w.fad>=4?'var(--risk)':w.fad>=3?'var(--warn)':'var(--ink2)')+'">'+w.fad+'</td>'+
-        '<td style="color:'+(w.dor>=3?'var(--risk)':w.dor>=2?'var(--warn)':'var(--ink2)')+'">'+w.dor+'</td>'+
-        '<td>'+w.hum+'</td><td>'+w.qt+'</td>'+
-        '<td><strong>'+w.total+'</strong></td></tr>';
-    }).join('')+
-    '</tbody></table></div>' : '') +
+      // HISTORY TABLE
+      (wHist.length?
+      '<div class="hist-card"><div class="hist-title">Hist\u00f3rico de Wellness</div>' +
+      '<table class="hist"><thead><tr><th>Data</th><th>Fadiga</th><th>Dor</th><th>Humor</th><th>QT Sono</th><th>Total</th></tr></thead><tbody>' +
+      wHist.slice().reverse().slice(0,12).map(function(w) {
+        return '<tr><td style="font-family:var(--f-mono);font-size:11px;color:var(--ink3)">'+(w.data||'\u2014')+'</td>'+
+          '<td style="color:'+(w.fad>=4?'var(--risk)':w.fad>=3?'var(--warn)':'var(--ink2)')+'">'+w.fad+'</td>'+
+          '<td style="color:'+(w.dor>=3?'var(--risk)':w.dor>=2?'var(--warn)':'var(--ink2)')+'">'+w.dor+'</td>'+
+          '<td>'+w.hum+'</td><td>'+w.qt+'</td>'+
+          '<td><strong>'+w.total+'</strong></td></tr>';
+      }).join('')+
+      '</tbody></table></div>' : '') +
 
-    // RECOVERY HISTORY
-    (recRows.length?
-    '<div class="hist-card"><div class="hist-title">Hist\u00f3rico NSP \u2014 Recupera\u00e7\u00e3o</div>'+
-    '<table class="hist"><thead><tr><th>Data</th><th>Status</th><th>Observa\u00e7\u00e3o</th></tr></thead><tbody>'+
-    recRows.slice().reverse().slice(0,8).map(function(r) {
-      var s=(r['\u00daltimo Status']||r['Caracter\u00edstica']||r['Status']||'').trim();
-      var cls=/reab/i.test(s)?'reab':/alerta/i.test(s)?'alerta':/apronto/i.test(s)?'apronto':'';
-      return '<tr><td style="font-family:var(--f-mono);font-size:11px;color:var(--ink3)">'+(r['Data']||r['data']||'\u2014')+'</td>'+
-        '<td>'+(cls?'<span class="pill '+cls+'">'+s+'</span>':(s||'\u2014'))+'</td>'+
-        '<td style="color:var(--ink3)">'+(r['Observa\u00e7\u00e3o']||r['Obs']||'')+'</td></tr>';
-    }).join('')+
-    '</tbody></table></div>' : '');
+      // RECOVERY HISTORY
+      (recRows.length?
+      '<div class="hist-card"><div class="hist-title">Hist\u00f3rico NSP \u2014 Recupera\u00e7\u00e3o</div>'+
+      '<table class="hist"><thead><tr><th>Data</th><th>Status</th><th>Observa\u00e7\u00e3o</th></tr></thead><tbody>'+
+      recRows.slice().reverse().slice(0,8).map(function(r) {
+        var s=(r['\u00daltimo Status']||r['Caracter\u00edstica']||r['Status']||'').trim();
+        var cls=/reab/i.test(s)?'reab':/alerta/i.test(s)?'alerta':/apronto/i.test(s)?'apronto':'';
+        return '<tr><td style="font-family:var(--f-mono);font-size:11px;color:var(--ink3)">'+(r['Data']||r['data']||'\u2014')+'</td>'+
+          '<td>'+(cls?'<span class="pill '+cls+'">'+s+'</span>':(s||'\u2014'))+'</td>'+
+          '<td style="color:var(--ink3)">'+(r['Observa\u00e7\u00e3o']||r['Obs']||'')+'</td></tr>';
+      }).join('')+
+      '</tbody></table></div>' : '');
 
-  // Draw charts after DOM is ready
+    // Draw charts after DOM is ready
 
-  // --- PAINEL CL\u00cdNICO ---
-  var clinHtml = buildClinicalPanel(clinical, disciplina, disponibilidade);
-  requestAnimationFrame(function(){
-    var el = document.getElementById('m2-content');
-    if(el){ var d=document.createElement('div'); d.innerHTML=clinHtml; el.appendChild(d); }
-  });
-  requestAnimationFrame(function() {
-    drawLineChart('chart-score', [{
-      data:scoreData, color:'var(--accent)',
-      fill:'rgba(37,99,235,.06)'
-    }], chartLabels, 100);
+    // --- PAINEL CL\u00cdNICO ---
+    var clinHtml = buildClinicalPanel(clinical, disciplina, disponibilidade);
+    requestAnimationFrame(function(){
+      var el = document.getElementById('m2-content');
+      if(el){ var d=document.createElement('div'); d.innerHTML=clinHtml; el.appendChild(d); }
+    });
+    requestAnimationFrame(function() {
+      drawLineChart('chart-score', [{
+        data:scoreData, color:'var(--accent)',
+        fill:'rgba(37,99,235,.06)'
+      }], chartLabels, 100);
 
-    drawLineChart('chart-wellness', [
-      {data:fadData, color:'#B91C1C', fill:'rgba(185,28,28,.04)'},
-      {data:dorData, color:'#B45309', fill:'rgba(180,83,9,.04)'},
-      {data:qtData,  color:'#2563EB', fill:'rgba(37,99,235,.04)'}
-    ], chartLabels, 5);
-  });
+      drawLineChart('chart-wellness', [
+        {data:fadData, color:'#B91C1C', fill:'rgba(185,28,28,.04)'},
+        {data:dorData, color:'#B45309', fill:'rgba(180,83,9,.04)'},
+        {data:qtData,  color:'#2563EB', fill:'rgba(37,99,235,.04)'}
+      ], chartLabels, 5);
+    });
+
+  } catch(err) {
+    console.error('[M2] carregarAtleta crash:', err);
+    document.getElementById('m2-content').innerHTML = '<div style="padding:32px;text-align:center;color:var(--risk)">Erro ao renderizar ficha. Verifique o console (F12).</div>';
+  }
 }
 
 iniciarM2();
