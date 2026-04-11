@@ -710,7 +710,10 @@ function urlSheet(sid, aba) {
 
 async function fetchSheetCSV(url) {
   var res = await fetch(url);
-  if (!res.ok) throw new Error('HTTP ' + res.status + ' -- ' + url);
+  if (!res.ok) {
+    console.warn('[M1] HTTP', res.status, url.substring(url.indexOf('/d/')+3, url.indexOf('/gviz')));
+    return '';
+  }
   return res.text();
 }
 
@@ -1319,42 +1322,28 @@ function abrirFicha(nome) {
    APP INIT
 ========================= */
 async function iniciar() {
-  // Detecta abertura como file:// e avisa
   if (window.location.protocol === 'file:') {
     setTableState('error',
-      'Voc\u00ea est\u00e1 abrindo o arquivo direto no browser (file://). ' +
-      'O Chrome bloqueia requisi\u00e7\u00f5es externas nesse modo. ' +
-      'Use um servidor local: no terminal, entre na pasta do arquivo e rode: ' +
-      '<code>python3 -m http.server 8080</code> ' +
-      'depois acesse <a href="http://localhost:8080" target="_blank">http://localhost:8080</a>'
+      'Abrindo como file://. Use um servidor local: <code>python3 -m http.server 8080</code>'
     );
-    setSyncState('error', 'Abrir via servidor HTTP');
+    setSyncState('error', 'Usar servidor HTTP');
     return;
   }
-  atualizarVisibilidadeCaixaConfig();
-  setSyncState('loading', 'Conectando...');
+
+  setSyncState('loading', 'Conectando\u2026');
   setTableState('loading');
 
   if (!(isSIDValido(NSP_SID) && isSIDValido(DESEMP_SID))) {
-    setSyncState('error', 'IDs n\u00E3o configurados');
+    setSyncState('error', 'SIDs n\u00e3o configurados');
     carregarDadosDemo();
     return;
   }
 
   try {
-    var NSP = function(aba) { return urlSheet(NSP_SID, aba); };
+    var NSP = function(aba) { return urlSheet(NSP_SID,    aba); };
     var DES = function(aba) { return urlSheet(DESEMP_SID, aba); };
+    var EPI = function(aba) { return urlSheet(EPI_SID,    aba); };
 
-    // Log das URLs exatas para debug
-    console.log('[M1] URLs que serao buscadas:');
-    console.log('  Cadastro:', NSP('Cadastro'));
-    console.log('  Recuperacao:', NSP('BD Recupera\u00e7\u00e3o e Prontid\u00e3o'));
-    console.log('  Pre Treino:', NSP('Pr\u00e9 Treino'));
-    console.log('  BD Carga:', NSP('BD Controle de Carga'));
-    console.log('  Desempenho:', DES('Desempenho Individual'));
-    console.log('  Mapeamento:', DES('Mapeamento'));
-
-    // Busca planilhas em paralelo
     var resultados = await Promise.allSettled([
       fetchSheetCSV(NSP('Cadastro')),
       fetchSheetCSV(NSP('BD Recupera\u00e7\u00e3o e Prontid\u00e3o')),
@@ -1362,67 +1351,51 @@ async function iniciar() {
       fetchSheetCSV(NSP('BD Controle de Carga')),
       fetchSheetCSV(DES('Desempenho Individual')),
       fetchSheetCSV(DES('Mapeamento')),
-      fetchSheetCSV(urlSheet(EPI_SID, 'Epidemiol\u00f3gico')).catch(function(){ return ''; })
+      fetchSheetCSV(EPI('Epidemiol\u00f3gico'))
     ]);
 
-    // Busca próximo jogo separadamente para não contaminar os resultados das planilhas
     fetchProximoJogo().catch(function() {});
 
-    var nomes = ['Cadastro','BD Recuperacao','Pre Treino','BD Carga','Desempenho','Mapeamento'];
+    // Log por aba
+    var _nomes = ['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico'];
     resultados.forEach(function(r, i) {
       if (r.status === 'fulfilled') {
-        console.log('[M1] OK:', nomes[i], '(' + (r.value||'').length + ' chars)');
+        console.log('[M1] \u2713', _nomes[i], (r.value||'').length + ' chars');
       } else {
-        console.error('[M1] FALHOU:', nomes[i], r.reason && r.reason.message ? r.reason.message : r.reason);
-      }
-    });
-    resultados.forEach(function(r, i) {
-      if (r.status === 'fulfilled') {
-        console.log('[M1] OK:', nomes[i], '(' + r.value.length + ' chars)');
-      } else {
-        console.error('[M1] FALHOU:', nomes[i], r.reason);
+        console.warn('[M1] \u2717', _nomes[i], r.reason && r.reason.message ? r.reason.message : r.reason);
       }
     });
 
-    // Ignora falha do índice 6 (API Futebol — fallback silencioso)
-    // Extrai resultados de forma tolerante a falhas por aba
-    var results = resultados.map(function(r) {
-      return r.status === 'fulfilled' ? r.value : '';
-    });
+    // Extrai valores — string vazia se falhou
+    var get = function(i) { return resultados[i].status === 'fulfilled' ? resultados[i].value : ''; };
 
-    // Verifica se Cadastro carregou (essencial para ter o roster)
-    if (!results[0] || results[0].trim() === '') {
-      throw new Error('Planilha Cadastro n\u00e3o acess\u00edvel. Verifique: planilha p\u00fablica? NSP_SID correto?');
+    var txtCadastro = get(0);
+    if (!txtCadastro || txtCadastro.trim() === '') {
+      console.warn('[M1] Cadastro vazio. Planilha p\u00fablica? NSP_SID correto?');
+      throw new Error('Planilha Cadastro n\u00e3o acess\u00edvel');
     }
 
-    // Debug: log status de cada aba no console
-    var _abas=['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico'];
-    resultados.forEach(function(r,i){r.status==='fulfilled'?console.log('[M1]\u2713',_abas[i],r.value.length+'ch'):console.warn('[M1]\u2717',_abas[i],r.reason&&r.reason.message);});
-
-    var txtCadastro    = results[0];
-    var txtRecuperacao = results[1];
-    var txtPreTreino   = results[2];
-    var txtCarga       = results[3];
-    var txtDesemp      = results[4];
-    var txtMapeamento  = results[5];
-
-    var cadastro    = parseCSV(txtCadastro).filter(function(r) { return r['Nome'] && r['Nome'].trim(); });
-    var recuperacao = parseCSV(txtRecuperacao).filter(function(r) { return r['Nome']; });
-    var preTreino   = parseCSV(txtPreTreino).filter(function(r) { return r['Nome:'] || r['Nome']; });
-    var cargaRows   = parseCSV(txtCarga).filter(function(r) { return r['Nome']; });
-    var desempRows  = parseCSV(txtDesemp).filter(function(r) { return r['atleta_nome']; });
-    var mapeamento  = parseCSV(txtMapeamento).filter(function(r) {
-      return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00E3o';
+    var cadastro    = parseCSV(txtCadastro).filter(function(r)  { return r['Nome'] && r['Nome'].trim(); });
+    var recuperacao = parseCSV(get(1)).filter(function(r)       { return r['Nome']; });
+    var preTreino   = parseCSV(get(2)).filter(function(r)       { return r['Nome:'] || r['Nome']; });
+    var cargaRows   = parseCSV(get(3)).filter(function(r)       { return r['Nome']; });
+    var desempRows  = parseCSV(get(4)).filter(function(r)       { return r['atleta_nome']; });
+    var mapeamento  = parseCSV(get(5)).filter(function(r) {
+      return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00e3o';
     });
-    epiRows = parseCSV(resultados[6] && resultados[6].status === 'fulfilled' ? resultados[6].value : '');
+    epiRows = parseCSV(get(6));
     cartoes = CARTOES_MOCK;
 
-    processarDados({ cadastro: cadastro, recuperacao: recuperacao, preTreino: preTreino, carga: cargaRows }, desempRows, mapeamento);
+    console.log('[M1] Atletas no cadastro:', cadastro.length);
+    processarDados(
+      { cadastro: cadastro, recuperacao: recuperacao, preTreino: preTreino, carga: cargaRows },
+      desempRows, mapeamento, epiRows, cartoes
+    );
     esconderCaixaConfig();
 
   } catch (err) {
-    console.error(err);
-    setSyncState('error', 'Erro ao carregar \u2014 exibindo dados demo');
+    console.error('[M1] Erro:', err.message);
+    setSyncState('error', 'Planilhas indispon\u00edveis \u2014 modo demonstra\u00e7\u00e3o');
     carregarDadosDemo();
   }
 }
