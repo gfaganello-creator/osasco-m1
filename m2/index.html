@@ -661,36 +661,54 @@ function trendHtml(trend, metric) {
 
 // ── MAIN INIT ────────────────────────────────────────────────────
 async function iniciarM2() {
-  // Fetch proxy in parallel
   fetchProxJogo().catch(function(){});
 
   try {
     var results = await Promise.allSettled([
-      fetchCSV(urlSheet(NSP_SID,'Cadastro')),
-      fetchCSV(urlSheet(NSP_SID,'BD Recupera\u00e7\u00e3o e Prontid\u00e3o')),
-      fetchCSV(urlSheet(NSP_SID,'Pr\u00e9 Treino')),
-      fetchCSV(urlSheet(NSP_SID,'BD Controle de Carga')),
-      fetchCSV(urlSheet(DESEMP_SID,'Mapeamento')),
-      fetchCSV(urlSheet(EPI_SID, 'Epidemiol\u00f3gico')).catch(function(){ return ''; })
+      fetchCSV(urlSheet(NSP_SID,    'Cadastro')),
+      fetchCSV(urlSheet(NSP_SID,    'BD Recupera\u00e7\u00e3o e Prontid\u00e3o')),
+      fetchCSV(urlSheet(NSP_SID,    'Pr\u00e9 Treino')),
+      fetchCSV(urlSheet(NSP_SID,    'BD Controle de Carga')),
+      fetchCSV(urlSheet(DESEMP_SID, 'Mapeamento')),
+      fetchCSV(urlSheet(EPI_SID,    'Epidemiol\u00f3gico'))
     ]);
-    var get = function(i){ return results[i].status==='fulfilled'?results[i].value:''; };
-    NSP_DATA = {
-      cadastro:    parseCSV(get(0)).filter(function(r){return r['Nome']&&r['Nome'].trim();}),
-      recuperacao: parseCSV(get(1)).filter(function(r){return r['Nome'];}),
-      preTreino:   parseCSV(get(2)).filter(function(r){return r['Nome:']||r['Nome'];}),
-      carga:       parseCSV(get(3)).filter(function(r){return r['Nome'];}),
-      mapeamento:  parseCSV(get(4)).filter(function(r){return r['nome_nsp'];})
+
+    var get = function(i) {
+      return results[i].status === 'fulfilled' ? results[i].value : '';
     };
-    epiRowsM2 = parseCSV(get(5) || '');
+
+    var _nomes = ['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Mapeamento','Epidemiol\u00f3gico'];
+    results.forEach(function(r, i) {
+      r.status === 'fulfilled'
+        ? console.log('[M2] \u2713', _nomes[i], r.value.length + 'ch')
+        : console.warn('[M2] \u2717', _nomes[i], r.reason && r.reason.message);
+    });
+
+    var txtCadastro = get(0);
+    if (!txtCadastro || txtCadastro.trim() === '') {
+      throw new Error('Planilha Cadastro n\u00e3o acess\u00edvel');
+    }
+
+    NSP_DATA = {
+      cadastro:    parseCSV(get(0)).filter(function(r) { return r['Nome'] && r['Nome'].trim(); }),
+      recuperacao: parseCSV(get(1)).filter(function(r) { return r['Nome']; }),
+      preTreino:   parseCSV(get(2)).filter(function(r) { return r['Nome:'] || r['Nome']; }),
+      carga:       parseCSV(get(3)).filter(function(r) { return r['Nome']; }),
+      mapeamento:  parseCSV(get(4)).filter(function(r) { return r['nome_nsp']; })
+    };
+    epiRowsM2 = parseCSV(get(5));
 
     console.log('[M2] Cadastro:', NSP_DATA.cadastro.length, 'atletas');
+
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
-    var sorted = NSP_DATA.cadastro.slice().sort(function(a,b){return a['Nome'].localeCompare(b['Nome'],'pt');});
+    var sorted = NSP_DATA.cadastro.slice().sort(function(a, b) {
+      return a['Nome'].localeCompare(b['Nome'], 'pt');
+    });
     sorted.forEach(function(r) {
       var o = document.createElement('option');
       o.value = r['Nome'];
-      o.textContent = r['Nome'] + (r['Nome Completo']?' \u2014 '+r['Nome Completo']:'');
+      o.textContent = r['Nome'] + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
       sel.appendChild(o);
     });
 
@@ -698,7 +716,21 @@ async function iniciarM2() {
     var nome = params.get('atleta');
     if (nome) { sel.value = nome; carregarAtleta(); }
 
-  } catch(e) { console.error('M2 init:', e); }
+  } catch(err) {
+    console.error('[M2] Erro ao carregar:', err.message);
+    // Mostrar aviso ao usuario
+    var sel = document.getElementById('athlete-select');
+    if (sel) {
+      sel.innerHTML = '<option value="">Planilhas indispon\u00edveis \u2014 verifique acesso</option>';
+    }
+    var content = document.getElementById('m2-content');
+    if (content) {
+      content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink3)">'
+        + '<p style="font-size:14px;margin-bottom:8px">N\u00e3o foi poss\u00edvel carregar os dados.</p>'
+        + '<p style="font-size:12px">Verifique se as planilhas est\u00e3o p\u00fablicas no Google Sheets.</p>'
+        + '</div>';
+    }
+  }
 }
 
 // ── RENDER ATHLETE ─────────────────────────────────────────────────
