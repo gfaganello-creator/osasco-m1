@@ -679,11 +679,11 @@ async function iniciarM2() {
       recuperacao: parseCSV(get(1)).filter(function(r){return r['Nome'];}),
       preTreino:   parseCSV(get(2)).filter(function(r){return r['Nome:']||r['Nome'];}),
       carga:       parseCSV(get(3)).filter(function(r){return r['Nome'];}),
-      mapeamento:  parseCSV(get(4)).filter(function(r){return r['nome_nsp'];
-    epiRowsM2 = parseCSV(get(5) || '');
-  var epiRawM2   = get(5);})
+      mapeamento:  parseCSV(get(4)).filter(function(r){return r['nome_nsp'];})
     };
+    epiRowsM2 = parseCSV(get(5) || '');
 
+    console.log('[M2] Cadastro:', NSP_DATA.cadastro.length, 'atletas');
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
     var sorted = NSP_DATA.cadastro.slice().sort(function(a,b){return a['Nome'].localeCompare(b['Nome'],'pt');});
