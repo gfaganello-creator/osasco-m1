@@ -249,6 +249,12 @@ table.hist tr:last-child td{border-bottom:none;}
 .disp-reab{background:rgba(185,28,28,.09);color:#B91C1C;}.disp-suspenso{background:rgba(185,28,28,.09);color:#B91C1C;}
 .disp-pendurado{background:rgba(184,146,42,.12);color:#B8922A;}
 @media(max-width:600px){.clin-grid{grid-template-columns:1fr;}}
+
+/* ── page header M2 ── */
+.page-hdr{padding:24px 28px 8px;}
+.page-eyebrow{font-family:var(--f-mono);font-size:10px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.page-title{font-family:var(--f-display);font-size:26px;font-weight:700;color:var(--ink);letter-spacing:-.5px;margin-bottom:4px;}
+.page-sub{font-size:13px;color:var(--ink3);margin-bottom:0;}
 </style>
 </head>
 <body>
@@ -268,10 +274,15 @@ table.hist tr:last-child td{border-bottom:none;}
 </nav>
 
 <div class="page">
+  <div class="page-hdr m2-hdr">
+    <div class="page-eyebrow">Alta Performance &middot; M2</div>
+    <div class="page-title">Ficha do Atleta</div>
+    <div class="page-sub">An&aacute;lise individual de performance, wellness e disponibilidade</div>
+  </div>
   <div class="selector-bar">
     <label>Atleta:</label>
     <select id="athlete-select" onchange="carregarAtleta()">
-      <option value="">-- Carregando elenco... --</option>
+      <option value="">-- Selecione um atleta --</option>
     </select>
   </div>
   <div id="m2-content">
