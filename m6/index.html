@@ -562,6 +562,31 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
 .jogo-status-row{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;}
 .jogo-stat-pill{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.55);}
 
+
+/* ── Validação alerta topo ── */
+.validacao-bar{display:none;align-items:center;gap:10px;
+  padding:10px 18px;border-radius:var(--r);margin-bottom:16px;
+  background:var(--risk3);border:1.5px solid var(--risk2);}
+.validacao-bar.show{display:flex;}
+.validacao-bar-icon{font-size:16px;flex-shrink:0;}
+.validacao-bar-txt{font-size:12px;color:var(--risk);font-weight:600;flex:1;}
+.validacao-bar-sub{font-size:11px;color:var(--ink3);}
+/* ── Score-impacto col na tabela ── */
+.score-delta{font-family:var(--f-mono);font-size:10px;font-weight:700;
+  padding:2px 6px;border-radius:4px;white-space:nowrap;}
+.sd-neg-heavy{background:var(--risk2);color:var(--risk);}
+.sd-neg-mid  {background:var(--warn2);color:var(--warn);}
+.sd-neg-low  {background:rgba(180,83,9,.06);color:var(--ink3);}
+.sd-pos      {background:var(--ok2);color:var(--ok);}
+.sd-zero     {background:var(--s3);color:var(--ink4);}
+/* ── Carga geral badge (no section-hdr) ── */
+.carga-geral-pill{font-family:var(--f-mono);font-size:9px;font-weight:700;
+  letter-spacing:.6px;padding:3px 9px;border-radius:5px;}
+.cg-alta    {background:var(--risk2);color:var(--risk);}
+.cg-moderada{background:var(--warn2);color:var(--warn);}
+.cg-baixa   {background:var(--ok2);color:var(--ok);}
+.cg-nenhuma {background:var(--s3);color:var(--ink3);}
+
 </style>
 </head>
 <body>
@@ -639,6 +664,15 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
     <button class="jogo-edit" onclick="abrirModalJogo()" style="margin-left:auto">Editar jogo</button>
   </div>
 
+  <!-- VALIDAÇÃO -->
+  <div class="validacao-bar" id="validacao-bar">
+    <span class="validacao-bar-icon">&#9888;</span>
+    <div>
+      <div class="validacao-bar-txt" id="validacao-txt">Alerta de escala&ccedil;&atilde;o</div>
+      <div class="validacao-bar-sub" id="validacao-sub"></div>
+    </div>
+  </div>
+
   <!-- KPI STRIP -->
   <div class="kpi-strip">
     <div class="kpi-cell kv-neu">
@@ -704,6 +738,7 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
             <th>Titular?</th>
             <th>Minutos</th>
             <th>Carga</th>
+            <th title="Impacto estimado no score M1">Score M1</th>
             <th style="min-width:160px">Observa&ccedil;&atilde;o</th>
           </tr>
         </thead>
@@ -720,7 +755,10 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
   <div class="section-card">
     <div class="section-hdr">
       <span class="section-title">Impacto para o Pr&oacute;ximo Ciclo</span>
-      <span class="section-badge">Autom&aacute;tico</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="carga-geral-pill" class="carga-geral-pill cg-nenhuma">Sem dados</span>
+        <span class="section-badge">Autom&aacute;tico</span>
+      </div>
     </div>
     <div class="impacto-grid">
       <div class="impacto-card imp-risk">
@@ -937,6 +975,27 @@ function toggleTitular(nome, el) {
 
 
 // ── Carga: 4 níveis (Alta/Moderada/Baixa/Preservado) ─────────────
+
+// ── Impacto no score M1 por minutos jogados ───────────────────────
+// 75-90min: -8 (carga alta)   30-74: -5 (moderada)
+//  1-29min: -2 (baixa)          0min: +2 (recuperação)
+function calcImpactoScore(min) {
+  if (min >= 75) return -8;
+  if (min >= 30) return -5;
+  if (min >= 1)  return -2;
+  return +2;
+}
+function impactoScoreTxt(delta) {
+  return (delta > 0 ? '+' : '') + delta;
+}
+function impactoScoreCls(delta) {
+  if (delta <= -8) return 'score-delta sd-neg-heavy';
+  if (delta <= -5) return 'score-delta sd-neg-mid';
+  if (delta <= -2) return 'score-delta sd-neg-low';
+  if (delta > 0)   return 'score-delta sd-pos';
+  return 'score-delta sd-zero';
+}
+
 function cargaLabel(min) {
   if (min >= 75) return 'Alta';
   if (min >= 30) return 'Moderada';
@@ -999,6 +1058,35 @@ function syncRowUI(nome) {
 }
 
 // ── KPIs ────────────────────────────────────────────────────────
+
+// ── Validação de escalação ────────────────────────────────────────
+function validarEscalacao() {
+  var bar     = document.getElementById('validacao-bar');
+  var txt     = document.getElementById('validacao-txt');
+  var sub     = document.getElementById('validacao-sub');
+  if (!bar) return;
+
+  var titulares = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && u.titular; });
+  var cargaAlta = elenco.filter(function(a) { return getU(a.nome).minutos >= 75; });
+  var jogaram   = elenco.filter(function(a) { return getU(a.nome).jogou; });
+  var alertas   = [];
+
+  if (titulares.length > 11)
+    alertas.push(titulares.length + ' titulares marcados (m\u00e1x. 11)');
+  if (cargaAlta.length > 11)
+    alertas.push(cargaAlta.length + ' atletas com carga alta \u2014 verifique os minutos');
+  if (jogaram.length > 18)
+    alertas.push(jogaram.length + ' atletas utilizados (limite regulamentar: 18 relacionados)');
+
+  if (alertas.length) {
+    bar.classList.add('show');
+    txt.textContent = alertas[0];
+    sub.textContent = alertas.slice(1).join(' \u00b7 ');
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
 function atualizarKPIs() {
   var jogaram   = elenco.filter(function(a) { return getU(a.nome).jogou; });
   var titulares = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && u.titular; });
@@ -1017,7 +1105,8 @@ function atualizarKPIs() {
   setText('kpi-entraram',  entraram.length);
   setText('kpi-banco-nao', bancoNao.length);
 
-  // Atualiza POST_GAME_DATA sempre que KPIs mudam
+  // Validação e publicação
+  validarEscalacao();
   publicarPostGameData();
 }
 
@@ -1066,6 +1155,28 @@ function renderImpacto() {
     (nivelGeral==='Alta'?'if-risk':nivelGeral==='Moderada'?'if-warn':'if-ok') +
     '">' + nivelGeral + '</span>' + (totalMin ? ' (m\u00e9dia ' + mediaMin + 'min por atleta que jogou).' : '.'));
 
+  // Carga geral badge
+  var pill = document.getElementById('carga-geral-pill');
+  if (pill) {
+    var cgMap = {
+      'Alta':    'carga-geral-pill cg-alta',
+      'Moderada':'carga-geral-pill cg-moderada',
+      'Baixa':   'carga-geral-pill cg-baixa',
+      'Nenhuma': 'carga-geral-pill cg-nenhuma'
+    };
+    pill.textContent = 'Carga geral: ' + nivelGeral;
+    pill.className   = cgMap[nivelGeral] || 'carga-geral-pill cg-nenhuma';
+  }
+
+  // Resumo de impacto no score
+  var impactTotal = jogaram.reduce(function(s, a) { return s + calcImpactoScore(getU(a.nome).minutos); }, 0);
+  if (jogaram.length) {
+    frases.push('\u2022 Impacto estimado no score M1: <span class="' +
+      (impactTotal <= -50 ? 'if-risk' : impactTotal <= -20 ? 'if-warn' : 'if-ok') +
+      '">' + impactTotal + ' pts</span> no elenco (' +
+      Math.round(impactTotal / jogaram.length * 10) / 10 + ' pts/atleta).');
+  }
+
   var el = document.getElementById('impacto-frases');
   if (el) el.innerHTML = frases.join('<br>');
 }
@@ -1099,15 +1210,19 @@ function renderOutput() {
 // ── Publicar dados para integração M1 ────────────────────────────
 function publicarPostGameData() {
   var atletas = elenco.map(function(a) {
-    var u = getU(a.nome);
+    var u   = getU(a.nome);
+    var min = u.minutos || 0;
     return {
-      nome:    a.nome,
-      minutos: u.minutos || 0,
-      carga:   cargaLabel(u.minutos || 0),
-      jogou:   u.jogou   || false,
-      titular: u.titular || false
+      nome:         a.nome,
+      minutos:      min,
+      carga:        cargaLabel(min),
+      jogou:        u.jogou   || false,
+      titular:      u.titular || false,
+      impactoScore: calcImpactoScore(min)
     };
   });
+
+  // POST_GAME_DATA: estrutura completa do jogo
   window.POST_GAME_DATA = {
     data:       jogo.data || new Date().toISOString().slice(0, 10),
     adversario: jogo.adversario,
@@ -1117,9 +1232,15 @@ function publicarPostGameData() {
     resultado:  jogo.resultado,
     atletas:    atletas
   };
-  // Também persiste em localStorage para que M1 possa ler
+
+  // POST_GAME_IMPACT: array enxuto para consumo do M1
+  window.POST_GAME_IMPACT = atletas.map(function(a) {
+    return { nome: a.nome, minutos: a.minutos, impactoScore: a.impactoScore };
+  });
+
   try {
-    localStorage.setItem('osasco_post_game', JSON.stringify(window.POST_GAME_DATA));
+    localStorage.setItem('osasco_post_game',   JSON.stringify(window.POST_GAME_DATA));
+    localStorage.setItem('osasco_post_impact', JSON.stringify(window.POST_GAME_IMPACT));
   } catch(e) {}
 }
 
@@ -1210,9 +1331,12 @@ function renderTabela() {
           + ' value="'+(u.minutos||'')+'"'
           + ' oninput="setMinutos(\''+a.nome.replace(/'/g,"\\'") + '\', this.value)"></td>'
       + '<td><span id="carga-'+sid+'" class="carga-pill '+cargaCls+'">'+cargaTxt+'</span></td>'
+      + (function(){
+          var delta = calcImpactoScore(u.minutos);
+          return '<td><span class="' + impactoScoreCls(delta) + '">' + impactoScoreTxt(delta) + '</span></td>';
+        })()
       + '<td><input type="text" class="obs-input" placeholder="observa\u00e7\u00e3o\u2026" value="'+u.obs+'"'
-          + ' oninput="setObs(\''+a.nome.replace(/'/g,"\\'") + '\', this.value)"></td>'
-      + '</tr>';
+          + ' oninput="setObs(\''+a.nome.replace(/'/g,"\\'") + '\', this.value)"></td>'+ '</tr>';
   }).join('');
 }
 
