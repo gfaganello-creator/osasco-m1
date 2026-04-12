@@ -402,6 +402,30 @@ table.m5tbl tbody tr.row-bloqueio{opacity:.6;}
 .resumo-over{color:var(--risk);background:var(--risk2);}
 .resumo-pend{color:var(--gold);background:var(--gold2);}
 
+
+/* ── Override manual badge ── */
+.override-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--f-mono);font-size:8px;font-weight:700;
+  letter-spacing:.4px;text-transform:uppercase;
+  padding:2px 7px;border-radius:3px;
+  background:var(--warn2);color:var(--warn);
+  vertical-align:middle;margin-left:6px;
+}
+table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
+/* ── Sector group header ── */
+.sector-row td{
+  background:var(--ink1)!important;color:var(--ink4);
+  font-family:var(--f-mono);font-size:8.5px;font-weight:700;
+  letter-spacing:2px;text-transform:uppercase;
+  padding:5px 14px!important;border-bottom:none!important;
+}
+/* ── KPI override counter ── */
+.kpi-cell.kv-over .kpi-val{color:var(--warn);}
+.kpi-cell.kv-over{border-top:3px solid var(--warn);}
+/* ── Resumo extra rows ── */
+.resumo-row-sm{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:var(--ink3);}
+
 </style>
 </head>
 <body>
@@ -493,6 +517,11 @@ table.m5tbl tbody tr.row-bloqueio{opacity:.6;}
       <div class="kpi-val" id="kpi-fora">0</div>
       <div class="kpi-sub">indispon&iacute;veis</div>
     </div>
+    <div class="kpi-cell kv-over">
+      <div class="kpi-label">Overrides</div>
+      <div class="kpi-val" id="kpi-over">0</div>
+      <div class="kpi-sub">manual &ne; sugest&atilde;o</div>
+    </div>
   </div>
 
   <!-- FILTERS -->
@@ -509,7 +538,7 @@ table.m5tbl tbody tr.row-bloqueio{opacity:.6;}
         <button class="ctx-btn ctx-d1"        data-ctx="d1" onclick="setContextJogo('d1')">D-1</button>
         <button class="ctx-btn ctx-jogo"      data-ctx="jogo" onclick="setContextJogo('jogo')">Jogo</button>
       </div>
-      <button class="suggest-btn" onclick="aplicarSugestoes()">&#9889; Sugerir escala&ccedil;&atilde;o</button>
+      <button class="suggest-btn" onclick="aplicarSugestoes()">&#9889; Gerar escala&ccedil;&atilde;o autom&aacute;tica</button>
     </div>
   </div>
 
@@ -1004,7 +1033,7 @@ function calcSugestao(atleta) {
   var clin = atleta._clinical;
   var disc = atleta._disciplina;
   var sc   = atleta.score;
-  var dec2 = atleta.decisao; // from calcularScore — M2-equivalent output
+  var dec2 = atleta.decisao;
 
   // ── BLOQUEIOS ABSOLUTOS ─────────────────────────────────────────
   if (disc && disc.suspenso)
@@ -1016,44 +1045,34 @@ function calcSugestao(atleta) {
   if (dec2 === 'N\u00e3o escalar')
     return { label: 'N\u00e3o escalar', cls: 'sug-risk', valor: 'fora', bloqueio: false, motivo: 'M2: N\u00e3o escalar' };
 
-  // ── THRESHOLD POR CONTEXTO ──────────────────────────────────────
-  // D-3 → conservador (+5): score precisa ser maior para subir de nível
-  // D-1 → normal
-  // JOGO → permite mais risco (-5)
-  var adj = contextJogo === 'd3' ? 5 : contextJogo === 'jogo' ? -5 : 0;
-  var limTitular = 75 + adj; // default D-3: 80, D-1: 75, Jogo: 70
-  var limBanco   = 60 + adj; // default D-3: 65, D-1: 60, Jogo: 55
+  // ── BASE THRESHOLDS (D-3/D-1/Jogo) ─────────────────────────────
+  // Base: Titular >= 70, Banco >= 60, Fora < 60
+  // D-3: +5 (mais conservador)  D-1: 0 (normal)  Jogo: -5 (permite risco)
+  var adj       = contextJogo === 'd3' ? 5 : contextJogo === 'jogo' ? -5 : 0;
+  var limTitular = 70 + adj;  // D-3: 75 | D-1: 70 | Jogo: 65
+  var limBanco   = 60 + adj;  // D-3: 65 | D-1: 60 | Jogo: 55
 
-  // score → nível base: 2=titular 1=banco 0=fora
   var nivel = sc >= limTitular ? 2 : sc >= limBanco ? 1 : 0;
+  // 2=titular  1=banco  0=fora
 
-  // ── REDUTORES (máx -2 níveis) ──────────────────────────────────
-  var reduz = 0;
-  var motivos = [];
+  // ── REDUTORES ────────────────────────────────────────────────────
+  var reduz = 0, motivos = [];
 
-  if (disp && disp.status === 'Limitado') {
-    reduz += 1; motivos.push('Limitado');
-  }
-  if (clin && clin.diasRetReal !== null && clin.diasRetReal <= 7) {
-    reduz += 1; motivos.push('Retorno ' + clin.diasRetReal + 'd');
-  }
-  if (clin && clin.diasLesao !== null && clin.diasLesao <= 14) {
-    reduz += 1; motivos.push('Les\u00e3o recente');
-  }
-  if (dec2 === 'Gerir minutos' || dec2 === 'Gerir min \u2014 monitorar dor') {
-    reduz = Math.max(reduz, 1); motivos.push('M2: gerir');
-  }
-  if (disc && disc.pendurado) {
-    motivos.push('Pendurado'); // só flag, sem redução
-  }
+  if (disp && disp.status === 'Limitado')               { reduz++;    motivos.push('Limitado'); }
+  if (clin && clin.diasRetReal !== null && clin.diasRetReal <= 7)
+                                                        { reduz++;    motivos.push('Retorno ' + clin.diasRetReal + 'd'); }
+  if (clin && clin.diasLesao  !== null && clin.diasLesao  <= 14)
+                                                        { reduz++;    motivos.push('Les\u00e3o recente'); }
+  if (dec2 === 'Gerir minutos' || dec2 === 'Gerir min \u2014 monitorar dor')
+                                                        { reduz = Math.max(reduz, 1); motivos.push('M2: gerir'); }
+  if (disc && disc.pendurado)                           { motivos.push('Pendurado'); } // flag only
 
   nivel = Math.max(0, nivel - reduz);
 
-  // ── MAP TO OUTPUT ────────────────────────────────────────────────
   var NIVEIS = [
-    { label: 'Evitar',         cls: 'sug-risk', valor: 'fora'    },
-    { label: 'Gerir minutos',  cls: 'sug-warn', valor: 'banco'   },
-    { label: 'Pronto 90min',   cls: 'sug-ok',   valor: 'titular' },
+    { label: 'Evitar',        cls: 'sug-risk', valor: 'fora'    },
+    { label: 'Gerir minutos', cls: 'sug-warn', valor: 'banco'   },
+    { label: 'Pronto 90min',  cls: 'sug-ok',   valor: 'titular' },
   ];
   var out = { label: NIVEIS[nivel].label, cls: NIVEIS[nivel].cls, valor: NIVEIS[nivel].valor, bloqueio: false };
   if (motivos.length) out.motivo = motivos.join(' \u00b7 ');
@@ -1116,14 +1135,32 @@ function buildAtletas(cadastro, recuperacao, preTreino, carga, desempRows, mapea
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────
 function atualizarKPIs(){
-  var t = dadosAtletas.length;
+  var t    = dadosAtletas.length;
   var tit  = Object.values(decisoes).filter(function(v){return v==='titular';}).length;
   var banco= Object.values(decisoes).filter(function(v){return v==='banco';}).length;
   var fora = Object.values(decisoes).filter(function(v){return v==='fora';}).length;
-  document.getElementById('kpi-total').textContent  = t;
-  document.getElementById('kpi-tit').textContent    = tit;
-  document.getElementById('kpi-banco').textContent  = banco;
-  document.getElementById('kpi-fora').textContent   = fora;
+  var over = dadosAtletas.filter(function(a){
+    var dec = decisoes[a.nome];
+    var sug = sugestoes[a.nome];
+    return dec && sug && dec !== sug.valor;
+  }).length;
+
+  document.getElementById('kpi-total').textContent = t;
+  document.getElementById('kpi-tit').textContent   = tit;
+  document.getElementById('kpi-banco').textContent = banco;
+  document.getElementById('kpi-fora').textContent  = fora;
+  var elOver = document.getElementById('kpi-over');
+  if (elOver) elOver.textContent = over;
+
+  // Visual: KPI titulares — highlight when exactly 11
+  var kpiTitCell = document.getElementById('kpi-tit');
+  if (kpiTitCell) {
+    var cell = kpiTitCell.closest ? kpiTitCell.closest('.kpi-cell') : null;
+    if (cell) {
+      cell.style.background = tit === 11 ? 'rgba(21,128,61,.10)' :
+                              tit > 11  ? 'rgba(185,28,28,.08)' : '';
+    }
+  }
 }
 
 // ─── Próximo jogo ─────────────────────────────────────────────────────────
@@ -1196,7 +1233,34 @@ document.addEventListener('click', function(e) {
 
 function aplicarSugestoes() {
   recalcularSugestoes();
+
+  // Fase 1: aplicar sugestão base para todos
   dadosAtletas.forEach(function(a) { decisoes[a.nome] = sugestoes[a.nome].valor; });
+
+  // Fase 2: garantir exatamente 11 titulares
+  var titulares = dadosAtletas.filter(function(a) { return decisoes[a.nome] === 'titular'; });
+  var elegíveis = dadosAtletas.filter(function(a) {
+    return decisoes[a.nome] !== 'fora' && !(sugestoes[a.nome] && sugestoes[a.nome].bloqueio);
+  });
+
+  if (titulares.length < 11) {
+    // Promover banco → titular até ter 11 (ordem de score desc)
+    var banco = dadosAtletas.filter(function(a) {
+      return decisoes[a.nome] === 'banco' && !(sugestoes[a.nome] && sugestoes[a.nome].bloqueio);
+    }).sort(function(a, b) { return b.score - a.score; });
+    var faltam = 11 - titulares.length;
+    for (var i = 0; i < Math.min(faltam, banco.length); i++) {
+      decisoes[banco[i].nome] = 'titular';
+    }
+  } else if (titulares.length > 11) {
+    // Rebaixar excesso → banco (os de menor score, excluindo bloqueados)
+    var excess = titulares.sort(function(a, b) { return a.score - b.score; });
+    var demais = titulares.length - 11;
+    for (var i = 0; i < demais; i++) {
+      decisoes[excess[i].nome] = 'banco';
+    }
+  }
+
   atualizarKPIs();
   renderTabela();
   renderRelacionados();
@@ -1204,6 +1268,18 @@ function aplicarSugestoes() {
 }
 
 // ─── Render tabela ────────────────────────────────────────────────────────
+
+/* Ordem de setores para agrupamento */
+var POS_ORDER = {
+  GK:1, GOL:1, GL:1,
+  ZAG:2, LD:3, LE:3, LAT:3, LDB:3, LDE:3,
+  VOL:4, MC:5, MEI:5, MO:6, MAI:6,
+  EXT:7, ALA:7, PNT:8, SS:8, SA:8, ATK:9, ATA:9, CA:9
+};
+function getPosOrder(pos) {
+  var p = (pos || '').toUpperCase().replace(/[-\/\s]/g,'');
+  return POS_ORDER[p] || 5;
+}
 function setFilter(f){ filtroAtual=f; renderTabela(); }
 function setSearch(v){ searchQuery=v.toLowerCase(); renderTabela(); }
 function sortBy(col){
@@ -1225,8 +1301,15 @@ function renderTabela(){
   lista.sort(function(a,b){
     var va, vb;
     if(sortCol==='nome')    { va=a.nome;    vb=b.nome;    return sortDir*(va<vb?-1:va>vb?1:0); }
-    if(sortCol==='posicao') { va=a.posicao; vb=b.posicao; return sortDir*(va<vb?-1:va>vb?1:0); }
-    return sortDir*(b.score - a.score);
+    if(sortCol==='posicao') {
+      var oa = getPosOrder(a.posicao), ob = getPosOrder(b.posicao);
+      if (oa !== ob) return sortDir*(oa-ob);
+      return sortDir*(b.score - a.score);
+    }
+    // default: sector order first, then score desc
+    var oa = getPosOrder(a.posicao), ob = getPosOrder(b.posicao);
+    if (oa !== ob) return (oa - ob);
+    return b.score - a.score;
   });
 
   var tbody = document.getElementById('m5-tbody');
@@ -1274,10 +1357,21 @@ function renderTabela(){
     }
     btnF = '<button class="dec-btn'+(dec==='fora'?' sel-fora':'')+'" data-idx="'+idx+'" data-val="fora">F</button>';
 
+    // Sector divider row
+    if (ri === 0 || getPosOrder(lista[ri-1].posicao) !== getPosOrder(a.posicao)) {
+      var sectorNames = ['','GK','Defesa','Defesa','Defesa','Meio','Meio','Meio','Ataque','Ataque'];
+      var sIdx = Math.min(getPosOrder(a.posicao), sectorNames.length-1);
+      var sName = sectorNames[sIdx] || a.posicao;
+      rows.push('<tr class="sector-row"><td colspan="9">'+sName+'</td></tr>');
+    }
+
+    // Override badge if manual decision differs from suggestion
+    var overrideBadge = diverge ? '<span class="override-badge">Override manual</span>' : '';
+
     rows.push(
       '<tr class="'+rowCls+'">'
       +'<td><span class="pos-badge">'+a.posicao+'</span></td>'
-      +'<td style="font-weight:600;color:var(--ink)">'+a.nome+'</td>'
+      +'<td style="font-weight:600;color:var(--ink)">'+a.nome+overrideBadge+'</td>'
       +'<td><span class="score-pill"><span class="score-num '+scoreCls+'">'+a.score+'</span></span></td>'
       +'<td><span class="classe-badge '+classeCls+'">'+a.classe+'</span></td>'
       +'<td><span class="disp-badge '+dispCls+'">'+dispStat+'</span></td>'
@@ -1347,6 +1441,19 @@ function renderResumoEscalacao() {
     + '<span class="resumo-label">Fora</span>'
     + '<span class="resumo-count resumo-count-out">' + fora.length + '</span>'
     + '</div>';
+  // Overrides: decisão manual diferente da sugestão
+  var overList = dadosAtletas.filter(function(a){
+    var dec = decisoes[a.nome];
+    var sug = sugestoes[a.nome];
+    return dec && sug && dec !== sug.valor;
+  });
+  if (overList.length) {
+    el.innerHTML += '<div class="resumo-row-sm">\u26a0 '
+      + overList.length + ' override(s) manual: '
+      + overList.map(function(a){ return a.nome; }).join(', ')
+      + '</div>';
+  }
+
 }
 
 
