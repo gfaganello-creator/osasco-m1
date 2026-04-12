@@ -360,6 +360,48 @@ table.mon-tbl tbody tr:last-child td{border-bottom:none;}
 @media(max-width:640px){.kpi-row{grid-template-columns:repeat(2,1fr);}.pos-grid{grid-template-columns:repeat(2,1fr);}}
 
 
+
+/* ── Contexto de jogo buttons ── */
+.ctx-strip{display:flex;align-items:center;gap:6px;}
+.ctx-btn{font-family:var(--f-mono);font-size:9px;font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;padding:4px 11px;border-radius:5px;
+  border:1.5px solid var(--s4);background:var(--s2);color:var(--ink3);cursor:pointer;transition:all .15s;}
+.ctx-btn:hover{background:var(--s3);}
+.ctx-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+.ctx-btn.ctx-d3.active{background:var(--ok);border-color:var(--ok);}
+.ctx-btn.ctx-d1.active{background:var(--warn);border-color:var(--warn);}
+.ctx-btn.ctx-jogo.active{background:var(--accent);border-color:var(--accent);}
+.ctx-label{font-family:var(--f-mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);white-space:nowrap;}
+
+/* ── Divergência visual ── */
+table.m5tbl tbody tr.row-diverge td{border-left:2px solid var(--warn)!important;background:rgba(180,83,9,.03);}
+table.m5tbl tbody tr.row-bloqueio{opacity:.6;}
+.div-flag{display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:50%;background:var(--warn2);color:var(--warn);
+  font-size:9px;font-weight:800;margin-left:5px;cursor:default;flex-shrink:0;}
+.dec-blocked{opacity:.35;cursor:not-allowed!important;}
+
+/* ── Resumo escalação ── */
+.resumo-card{background:var(--s1);border:1px solid var(--s4);border-radius:var(--r);
+  padding:16px 20px;margin-bottom:20px;}
+.resumo-card-title{font-family:var(--f-mono);font-size:9px;letter-spacing:1.8px;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:12px;}
+.resumo-row{display:flex;align-items:center;gap:10px;padding:5px 0;
+  border-bottom:1px solid var(--s3);}
+.resumo-row:last-child{border-bottom:none;}
+.resumo-label{font-family:var(--f-display);font-size:12px;font-weight:600;
+  color:var(--ink2);min-width:70px;}
+.resumo-count{font-family:var(--f-display);font-size:18px;font-weight:800;min-width:28px;}
+.resumo-count-ok{color:var(--ok);}
+.resumo-count-bank{color:var(--accent);}
+.resumo-count-out{color:var(--risk);}
+.resumo-ok{font-family:var(--f-mono);font-size:9px;font-weight:600;
+  color:var(--ok);background:var(--ok2);padding:2px 8px;border-radius:4px;}
+.resumo-warn{font-family:var(--f-mono);font-size:9px;font-weight:600;
+  color:var(--warn);background:var(--warn2);padding:2px 8px;border-radius:4px;}
+.resumo-over{color:var(--risk);background:var(--risk2);}
+.resumo-pend{color:var(--gold);background:var(--gold2);}
+
 </style>
 </head>
 <body>
@@ -461,8 +503,20 @@ table.mon-tbl tbody tr:last-child td{border-bottom:none;}
     <button class="filter-btn"        id="fb-fora"    onclick="setFilterBtn('fora')">Fora</button>
     <input  class="search-input"      type="text" placeholder="Buscar atleta ou posição…" oninput="setSearch(this.value)">
     <div class="filter-sep">
-      <button class="suggest-btn" onclick="aplicarSugestoes()">&#9889; Sugerir escalação</button>
+      <div class="ctx-strip">
+        <span class="ctx-label">Contexto:</span>
+        <button class="ctx-btn ctx-d3 active" data-ctx="d3" onclick="setContextJogo('d3')">D-3</button>
+        <button class="ctx-btn ctx-d1"        data-ctx="d1" onclick="setContextJogo('d1')">D-1</button>
+        <button class="ctx-btn ctx-jogo"      data-ctx="jogo" onclick="setContextJogo('jogo')">Jogo</button>
+      </div>
+      <button class="suggest-btn" onclick="aplicarSugestoes()">&#9889; Sugerir escala&ccedil;&atilde;o</button>
     </div>
+  </div>
+
+  <!-- RESUMO ESCALAÇÃO -->
+  <div class="resumo-card" id="resumo-card" style="display:none">
+    <div class="resumo-card-title">Resumo da Escala&ccedil;&atilde;o</div>
+    <div id="resumo-escalacao"></div>
   </div>
 
   <!-- TABLE -->
@@ -552,6 +606,8 @@ var PROX_JOGO = {
 // Estado
 var dadosAtletas = [];
 var decisoes     = {};  // {nome: 'titular'|'banco'|'fora'}
+var sugestoes    = {};  // {nome: sug_obj} — pré-calculado
+var contextJogo  = 'd3'; // 'd3' | 'd1' | 'jogo'
 var filtroAtual  = 'todos';
 var sortCol      = 'score';
 var sortDir      = -1;
@@ -942,19 +998,83 @@ function horasDesde(tsStr) {
   return (Date.now() - d.getTime()) / 3600000;
 }
 
-function calcSugestao(atleta){
+function calcSugestao(atleta) {
   var disp = atleta._disponibilidade;
-  if(disp && disp.bloqueio) return {label:'Fora obrigat\u00f3rio', cls:'sug-risk', valor:'fora'};
-  var sc = atleta.score;
-  if(disp && disp.status === 'Limitado') {
-    return sc >= 60
-      ? {label:'Gerir minutos', cls:'sug-warn', valor:'banco'}
-      : {label:'Evitar', cls:'sug-risk', valor:'fora'};
+  var clin = atleta._clinical;
+  var disc = atleta._disciplina;
+  var sc   = atleta.score;
+  var dec2 = atleta.decisao; // from calcularScore — M2-equivalent output
+
+  // ── BLOQUEIOS ABSOLUTOS ─────────────────────────────────────────
+  if (disc && disc.suspenso)
+    return { label: 'Suspenso', cls: 'sug-risk', valor: 'fora', bloqueio: true, motivo: 'Suspenso por cart\u00f5es' };
+  if (clin && clin.status === 'reabilitacao')
+    return { label: 'Reabilita\u00e7\u00e3o', cls: 'sug-risk', valor: 'fora', bloqueio: true, motivo: 'Em reabilita\u00e7\u00e3o' };
+
+  // ── DECISÃO M2 ─────────────────────────────────────────────────
+  if (dec2 === 'N\u00e3o escalar')
+    return { label: 'N\u00e3o escalar', cls: 'sug-risk', valor: 'fora', bloqueio: false, motivo: 'M2: N\u00e3o escalar' };
+
+  // ── THRESHOLD POR CONTEXTO ──────────────────────────────────────
+  // D-3 → conservador (+5): score precisa ser maior para subir de nível
+  // D-1 → normal
+  // JOGO → permite mais risco (-5)
+  var adj = contextJogo === 'd3' ? 5 : contextJogo === 'jogo' ? -5 : 0;
+  var limTitular = 75 + adj; // default D-3: 80, D-1: 75, Jogo: 70
+  var limBanco   = 60 + adj; // default D-3: 65, D-1: 60, Jogo: 55
+
+  // score → nível base: 2=titular 1=banco 0=fora
+  var nivel = sc >= limTitular ? 2 : sc >= limBanco ? 1 : 0;
+
+  // ── REDUTORES (máx -2 níveis) ──────────────────────────────────
+  var reduz = 0;
+  var motivos = [];
+
+  if (disp && disp.status === 'Limitado') {
+    reduz += 1; motivos.push('Limitado');
   }
-  if(sc >= 75) return {label:'Pronto 90min', cls:'sug-ok',   valor:'titular'};
-  if(sc >= 60) return {label:'Gerir minutos', cls:'sug-warn', valor:'banco'};
-  return       {label:'Evitar',         cls:'sug-risk', valor:'fora'};
+  if (clin && clin.diasRetReal !== null && clin.diasRetReal <= 7) {
+    reduz += 1; motivos.push('Retorno ' + clin.diasRetReal + 'd');
+  }
+  if (clin && clin.diasLesao !== null && clin.diasLesao <= 14) {
+    reduz += 1; motivos.push('Les\u00e3o recente');
+  }
+  if (dec2 === 'Gerir minutos' || dec2 === 'Gerir min \u2014 monitorar dor') {
+    reduz = Math.max(reduz, 1); motivos.push('M2: gerir');
+  }
+  if (disc && disc.pendurado) {
+    motivos.push('Pendurado'); // só flag, sem redução
+  }
+
+  nivel = Math.max(0, nivel - reduz);
+
+  // ── MAP TO OUTPUT ────────────────────────────────────────────────
+  var NIVEIS = [
+    { label: 'Evitar',         cls: 'sug-risk', valor: 'fora'    },
+    { label: 'Gerir minutos',  cls: 'sug-warn', valor: 'banco'   },
+    { label: 'Pronto 90min',   cls: 'sug-ok',   valor: 'titular' },
+  ];
+  var out = { label: NIVEIS[nivel].label, cls: NIVEIS[nivel].cls, valor: NIVEIS[nivel].valor, bloqueio: false };
+  if (motivos.length) out.motivo = motivos.join(' \u00b7 ');
+  return out;
 }
+
+// ─── Pré-calcula sugestões de todos os atletas ────────────────────────────
+function recalcularSugestoes() {
+  sugestoes = {};
+  dadosAtletas.forEach(function(a) { sugestoes[a.nome] = calcSugestao(a); });
+}
+
+// ─── Muda contexto de jogo e recalcula ───────────────────────────────────
+function setContextJogo(ctx) {
+  contextJogo = ctx;
+  document.querySelectorAll('.ctx-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.ctx === ctx);
+  });
+  recalcularSugestoes();
+  renderTabela();
+}
+
 
 // ─── Build athlete list from raw sheet data ───────────────────────────────
 function buildAtletas(cadastro, recuperacao, preTreino, carga, desempRows, mapeamento, epiRows, cartoes){
@@ -1064,14 +1184,22 @@ function decidir(idx, valor){
   renderRelacionados();
 }
 
-function aplicarSugestoes(){
-  dadosAtletas.forEach(function(a){
-    var sug = calcSugestao(a);
-    decisoes[a.nome] = sug.valor;
-  });
+/* Event delegation — data-val buttons */
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest ? e.target.closest('[data-val]') : null;
+  if (!btn) return;
+  var idx = parseInt(btn.getAttribute('data-idx'), 10);
+  var val = btn.getAttribute('data-val');
+  if (!isNaN(idx) && val) decidir(idx, val);
+});
+
+function aplicarSugestoes() {
+  recalcularSugestoes();
+  dadosAtletas.forEach(function(a) { decisoes[a.nome] = sugestoes[a.nome].valor; });
   atualizarKPIs();
   renderTabela();
   renderRelacionados();
+  renderResumoEscalacao();
 }
 
 // ─── Render tabela ────────────────────────────────────────────────────────
@@ -1087,56 +1215,140 @@ function renderTabela(){
     if(filtroAtual==='titular' && decisoes[a.nome]!=='titular') return false;
     if(filtroAtual==='banco'   && decisoes[a.nome]!=='banco')   return false;
     if(filtroAtual==='fora'    && decisoes[a.nome]!=='fora')    return false;
-    if(filtroAtual==='disp'    && a._disponibilidade && a._disponibilidade.bloqueio) return false;
-    if(searchQuery && !a.nome.toLowerCase().includes(searchQuery) && !a.posicao.toLowerCase().includes(searchQuery)) return false;
+    if(filtroAtual==='disp' && a._disponibilidade && a._disponibilidade.bloqueio) return false;
+    if(searchQuery && !a.nome.toLowerCase().includes(searchQuery) &&
+       !a.posicao.toLowerCase().includes(searchQuery)) return false;
     return true;
   });
 
   lista.sort(function(a,b){
     var va, vb;
-    if(sortCol==='nome')   { va=a.nome;    vb=b.nome;    return sortDir*(va<vb?-1:va>vb?1:0); }
-    if(sortCol==='posicao'){ va=a.posicao; vb=b.posicao; return sortDir*(va<vb?-1:va>vb?1:0); }
-    va = a.score; vb = b.score;
-    return sortDir*(vb-va);
+    if(sortCol==='nome')    { va=a.nome;    vb=b.nome;    return sortDir*(va<vb?-1:va>vb?1:0); }
+    if(sortCol==='posicao') { va=a.posicao; vb=b.posicao; return sortDir*(va<vb?-1:va>vb?1:0); }
+    return sortDir*(b.score - a.score);
   });
 
   var tbody = document.getElementById('m5-tbody');
   if(!lista.length){
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--ink3);padding:32px">Nenhum atleta encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--ink3);padding:32px">Nenhum atleta encontrado</td></tr>';
     return;
   }
 
-  tbody.innerHTML = lista.map(function(a){
-    var dec = decisoes[a.nome] || '';
+  var rows = [];
+  for(var ri = 0; ri < lista.length; ri++){
+    var a       = lista[ri];
+    var dec     = decisoes[a.nome] || '';
+    var sug     = sugestoes[a.nome] || calcSugestao(a);
+    var diverge = dec && dec !== sug.valor;
+    var blocado = sug.bloqueio;
+
     var rowCls = dec==='titular'?'row-titular':dec==='banco'?'row-banco':dec==='fora'?'row-fora':'';
-    var scoreCls = a.score>=72?'score-ok':a.score>=48?'score-warn':'score-risk';
-    var classeCls= a.classe==='OK'?'cb-ok':a.classe==='Aten\u00e7\u00e3o'?'cb-warn':'cb-risk';
-    var dispCls  = a._disponibilidade?(a._disponibilidade.cls||'disp-ok'):'disp-ok';
-    var dispStat = a._disponibilidade?(a._disponibilidade.status||'Dispon\u00edvel'):'Dispon\u00edvel';
-    var alertsHtml = (a.alertas||[]).slice(0,3).map(function(al){
-      return '<span class="alerta-tag t-'+al.t+'">'+al.m+'</span>';
-    }).join('');
-    var sug = calcSugestao(a);
-    var sugHtml = '<span class="sug-label ' + sug.cls + '">' + sug.label + '</span>';
-    var idx = dadosAtletas.indexOf(a);
-    var btnT = '<button class="dec-btn' + (dec==='titular'?' sel-titular':'') + '" onclick="decidir(' + idx + ',\'titular\')">T</button>';
-    var btnB = '<button class="dec-btn' + (dec==='banco'  ?' sel-banco'  :'') + '" onclick="decidir(' + idx + ',\'banco\')">B</button>';
-    var btnF = '<button class="dec-btn' + (dec==='fora'   ?' sel-fora'   :'') + '" onclick="decidir(' + idx + ',\'fora\')">F</button>';
-    return '<tr class="' + rowCls + '">'
-      + '<td><span class="pos-badge">'+a.posicao+'</span></td>'
-      + '<td style="font-weight:600;color:var(--ink)">'+a.nome+'</td>'
-      + '<td><span class="score-pill"><span class="score-num '+scoreCls+'">'+a.score+'</span></span></td>'
-      + '<td><span class="classe-badge '+classeCls+'">'+a.classe+'</span></td>'
-      + '<td><span class="disp-badge '+dispCls+'">'+dispStat+'</span></td>'
-      + '<td><span class="sug-label" style="font-size:11px;color:var(--ink3)">'+a.statusLabel+'</span></td>'
-      + '<td><div class="alerts-cell">'+(alertsHtml||'<span style="color:var(--ink4);font-size:11px">\u2014</span>')+'</div></td>'
-      + '<td>'+sugHtml+'</td>'
-      + '<td><div class="dec-btns">'+btnT+btnB+btnF+'</div></td>'
-      + '</tr>';
-  }).join('');
+    if(diverge) rowCls += ' row-diverge';
+    if(blocado) rowCls += ' row-bloqueio';
+
+    var scoreCls  = a.score>=72?'score-ok':a.score>=48?'score-warn':'score-risk';
+    var classeCls = a.classe==='OK'?'cb-ok':a.classe==='\u00c7\u00e3o'?'cb-warn':'cb-risk';
+    var dispCls   = a._disponibilidade ? (a._disponibilidade.cls   || 'disp-ok')         : 'disp-ok';
+    var dispStat  = a._disponibilidade ? (a._disponibilidade.status|| 'Dispon\u00edvel') : 'Dispon\u00edvel';
+
+    var ahtml = '';
+    var alts = (a.alertas||[]).slice(0,3);
+    for(var ai=0; ai<alts.length; ai++){
+      ahtml += '<span class="alerta-tag t-'+alts[ai].t+'">'+alts[ai].m+'</span>';
+    }
+    if(!ahtml) ahtml = '<span style="color:var(--ink4);font-size:11px">\u2014</span>';
+
+    var sugTitle = sug.motivo ? (' title="'+sug.motivo+'"') : '';
+    var sugHtml  = '<span class="sug-label '+sug.cls+'"'+sugTitle+'>'+sug.label+'</span>';
+    if(diverge) sugHtml += '<span class="div-flag" title="Diverge: '+sug.label+'">!</span>';
+
+    var idx  = dadosAtletas.indexOf(a);
+    var btnT, btnB, btnF;
+    if(blocado){
+      btnT = '<button class="dec-btn dec-blocked" disabled>T</button>';
+      btnB = '<button class="dec-btn dec-blocked" disabled>B</button>';
+    } else {
+      btnT = '<button class="dec-btn'+(dec==='titular'?' sel-titular':'')+'" data-idx="'+idx+'" data-val="titular">T</button>';
+      btnB = '<button class="dec-btn'+(dec==='banco'  ?' sel-banco'  :'')+'" data-idx="'+idx+'" data-val="banco">B</button>';
+    }
+    btnF = '<button class="dec-btn'+(dec==='fora'?' sel-fora':'')+'" data-idx="'+idx+'" data-val="fora">F</button>';
+
+    rows.push(
+      '<tr class="'+rowCls+'">'
+      +'<td><span class="pos-badge">'+a.posicao+'</span></td>'
+      +'<td style="font-weight:600;color:var(--ink)">'+a.nome+'</td>'
+      +'<td><span class="score-pill"><span class="score-num '+scoreCls+'">'+a.score+'</span></span></td>'
+      +'<td><span class="classe-badge '+classeCls+'">'+a.classe+'</span></td>'
+      +'<td><span class="disp-badge '+dispCls+'">'+dispStat+'</span></td>'
+      +'<td><span style="font-size:11px;color:var(--ink3)">'+a.statusLabel+'</span></td>'
+      +'<td><div class="alerts-cell">'+ahtml+'</div></td>'
+      +'<td>'+sugHtml+'</td>'
+      +'<td><div class="dec-btns">'+btnT+btnB+btnF+'</div></td>'
+      +'</tr>'
+    );
+  }
+  tbody.innerHTML = rows.join('');
 }
 
-// ─── Relacionados ─────────────────────────────────────────────────────────
+// ─── Resumo final da escalação ────────────────────────────────────────────
+function renderResumoEscalacao() {
+  var tit   = dadosAtletas.filter(function(a) { return decisoes[a.nome] === 'titular'; });
+  var banco = dadosAtletas.filter(function(a) { return decisoes[a.nome] === 'banco';   });
+  var fora  = dadosAtletas.filter(function(a) { return decisoes[a.nome] === 'fora';    });
+  var total = tit.length + banco.length + fora.length;
+
+  var card = document.getElementById('resumo-card');
+  var el   = document.getElementById('resumo-escalacao');
+  if (!el) return;
+
+  if (card) card.style.display = total > 0 ? '' : 'none';
+  if (total === 0) return;
+
+  var kpiTit = document.getElementById('kpi-tit');
+  if (kpiTit) {
+    var cell = kpiTit.closest ? kpiTit.closest('.kpi-cell') : null;
+    if (cell) {
+      cell.style.background = tit.length === 11 ? 'rgba(21,128,61,.10)' :
+                              tit.length > 11  ? 'rgba(185,28,28,.08)' : '';
+    }
+  }
+
+  var warnTit = tit.length === 11
+    ? '<span class="resumo-ok">\u2713 11/11 titulares</span>'
+    : tit.length > 11
+      ? '<span class="resumo-warn resumo-over">\u26a0 ' + (tit.length - 11) + ' a mais que 11</span>'
+      : '<span class="resumo-warn">\u26a0 ' + (11 - tit.length) + ' titular(es) faltando</span>';
+
+  var bloqs = dadosAtletas.filter(function(a) {
+    return a._disponibilidade && a._disponibilidade.bloqueio && decisoes[a.nome] !== 'fora';
+  });
+  var warnBloq = bloqs.length
+    ? '<span class="resumo-warn">\u26a0 ' + bloqs.length + ' bloqueado(s) n\u00e3o marcado(s) Fora</span>'
+    : '';
+
+  var pend = tit.filter(function(a) { return a._disciplina && a._disciplina.pendurado; });
+  var warnPend = pend.length
+    ? '<span class="resumo-warn resumo-pend">\u26a0 ' + pend.length + ' pendurado(s) como titular</span>'
+    : '';
+
+  el.innerHTML =
+    '<div class="resumo-row">'
+    + '<span class="resumo-label">Titulares</span>'
+    + '<span class="resumo-count resumo-count-ok">' + tit.length + '</span>'
+    + warnTit + warnPend
+    + '</div>'
+    + '<div class="resumo-row">'
+    + '<span class="resumo-label">Banco</span>'
+    + '<span class="resumo-count resumo-count-bank">' + banco.length + '</span>'
+    + warnBloq
+    + '</div>'
+    + '<div class="resumo-row">'
+    + '<span class="resumo-label">Fora</span>'
+    + '<span class="resumo-count resumo-count-out">' + fora.length + '</span>'
+    + '</div>';
+}
+
+
 function renderRelacionados(){
   var grupos = {titular:[], banco:[], fora:[]};
   dadosAtletas.forEach(function(a){
@@ -1223,9 +1435,11 @@ async function iniciarM5(){
     lbl.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     document.getElementById('m5-count').textContent = dadosAtletas.length + ' atletas \u00b7 ' + new Date().toLocaleDateString('pt-BR');
 
+    recalcularSugestoes();
     atualizarKPIs();
     renderTabela();
     renderRelacionados();
+    renderResumoEscalacao();
 
   } catch(err){
     console.error('[M5]', err);
