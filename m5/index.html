@@ -1048,9 +1048,11 @@ function calcSugestao(atleta) {
   // ── BASE THRESHOLDS (D-3/D-1/Jogo) ─────────────────────────────
   // Base: Titular >= 70, Banco >= 60, Fora < 60
   // D-3: +5 (mais conservador)  D-1: 0 (normal)  Jogo: -5 (permite risco)
-  var adj       = contextJogo === 'd3' ? 5 : contextJogo === 'jogo' ? -5 : 0;
-  var limTitular = 70 + adj;  // D-3: 75 | D-1: 70 | Jogo: 65
-  var limBanco   = 60 + adj;  // D-3: 65 | D-1: 60 | Jogo: 55
+  // Thresholds base mais realistas (dados reais têm scores 55-70)
+  // D-3: prudente (+5)  D-1: normal  Jogo: agressivo (-5)
+  var adj        = contextJogo === 'd3' ? 5 : contextJogo === 'jogo' ? -5 : 0;
+  var limTitular = 65 + adj;  // D-3: 70 | D-1: 65 | Jogo: 60
+  var limBanco   = 55 + adj;  // D-3: 60 | D-1: 55 | Jogo: 50
 
   var nivel = sc >= limTitular ? 2 : sc >= limBanco ? 1 : 0;
   // 2=titular  1=banco  0=fora
@@ -1234,52 +1236,51 @@ document.addEventListener('click', function(e) {
 function aplicarSugestoes() {
   recalcularSugestoes();
 
-  // Fase 1: aplicar sugestão base para todos
-  dadosAtletas.forEach(function(a) { decisoes[a.nome] = sugestoes[a.nome].valor; });
-
-  // Fase 2: garantir exatamente 11 titulares
-  var titulares = dadosAtletas.filter(function(a) { return decisoes[a.nome] === 'titular'; });
-  var elegíveis = dadosAtletas.filter(function(a) {
-    return decisoes[a.nome] !== 'fora' && !(sugestoes[a.nome] && sugestoes[a.nome].bloqueio);
+  // ── Passo 1: separar bloqueados (suspenso/reab) → sempre Fora
+  var bloqueados = dadosAtletas.filter(function(a) {
+    var sug = sugestoes[a.nome];
+    return sug && sug.bloqueio;
   });
+  bloqueados.forEach(function(a) { decisoes[a.nome] = 'fora'; });
 
-  if (titulares.length < 11) {
-    // Promover banco → titular até ter 11 (ordem de score desc)
-    var banco = dadosAtletas.filter(function(a) {
-      return decisoes[a.nome] === 'banco' && !(sugestoes[a.nome] && sugestoes[a.nome].bloqueio);
-    }).sort(function(a, b) { return b.score - a.score; });
-    var faltam = 11 - titulares.length;
-    for (var i = 0; i < Math.min(faltam, banco.length); i++) {
-      decisoes[banco[i].nome] = 'titular';
-    }
-  } else if (titulares.length > 11) {
-    // Rebaixar excesso → banco (os de menor score, excluindo bloqueados)
-    var excess = titulares.sort(function(a, b) { return a.score - b.score; });
-    var demais = titulares.length - 11;
-    for (var i = 0; i < demais; i++) {
-      decisoes[excess[i].nome] = 'banco';
+  // ── Passo 2: atletas elegíveis (não bloqueados), ordenados por score desc
+  var elegiveis = dadosAtletas
+    .filter(function(a) {
+      var sug = sugestoes[a.nome];
+      return !(sug && sug.bloqueio);
+    })
+    .sort(function(a, b) { return b.score - a.score; });
+
+  // ── Passo 3: atribuir T / B / F por ranking absoluto
+  // Prioridade de redução (limitado, retorno recente): um atleta com redutor
+  // ainda entra como titular se estiver entre os 11 melhores elegíveis.
+  // O campo "valor" da sugestão já reflete os redutores.
+  // Mas aqui usamos ranking puro para garantir completude.
+  var MAX_TIT   = 11;
+  var MAX_BANCO = 7;  // até 7 no banco (18 relacionados total)
+
+  for (var i = 0; i < elegiveis.length; i++) {
+    var a = elegiveis[i];
+    var sug = sugestoes[a.nome];
+    if (i < MAX_TIT) {
+      // Top-11: titular, exceto se a própria sugestão bloqueia por outro motivo
+      decisoes[a.nome] = (sug && sug.valor === 'fora' && !sug.bloqueio)
+        ? 'banco'          // M2 disse "não escalar" → rebaixar para banco
+        : 'titular';
+    } else if (i < MAX_TIT + MAX_BANCO) {
+      decisoes[a.nome] = 'banco';
+    } else {
+      decisoes[a.nome] = 'fora';
     }
   }
 
+  // ── Passo 4: atualizar UI
   atualizarKPIs();
   renderTabela();
   renderRelacionados();
   renderResumoEscalacao();
 }
 
-// ─── Render tabela ────────────────────────────────────────────────────────
-
-/* Ordem de setores para agrupamento */
-var POS_ORDER = {
-  GK:1, GOL:1, GL:1,
-  ZAG:2, LD:3, LE:3, LAT:3, LDB:3, LDE:3,
-  VOL:4, MC:5, MEI:5, MO:6, MAI:6,
-  EXT:7, ALA:7, PNT:8, SS:8, SA:8, ATK:9, ATA:9, CA:9
-};
-function getPosOrder(pos) {
-  var p = (pos || '').toUpperCase().replace(/[-\/\s]/g,'');
-  return POS_ORDER[p] || 5;
-}
 function setFilter(f){ filtroAtual=f; renderTabela(); }
 function setSearch(v){ searchQuery=v.toLowerCase(); renderTabela(); }
 function sortBy(col){
