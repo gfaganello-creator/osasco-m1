@@ -1288,6 +1288,18 @@ function sortBy(col){
   renderTabela();
 }
 
+/* ── Sector order helpers ── */
+var POS_ORDER = {
+  GK:1, GOL:1, GL:1,
+  ZAG:2, LD:3, LE:3, LAT:3, LDB:3, LDE:3,
+  VOL:4, MC:5, MEI:5, MO:6, MAI:6,
+  EXT:7, ALA:7, PNT:8, SS:8, SA:8, ATK:9, ATA:9, CA:9
+};
+function getPosOrder(pos) {
+  var p = (pos || '').toUpperCase().replace(/[-\/\s]/g, '');
+  return POS_ORDER[p] || 5;
+}
+
 function renderTabela(){
   var lista = dadosAtletas.filter(function(a){
     if(filtroAtual==='titular' && decisoes[a.nome]!=='titular') return false;
