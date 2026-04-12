@@ -541,6 +541,27 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
 .btn-secondary:hover{background:var(--s3);}
 .pos-badge{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.4px;background:var(--s2);border:1px solid var(--s4);padding:2px 7px;border-radius:4px;color:var(--ink2);}
 
+
+/* ── Carga moderada (novo nível entre alta e baixa) ── */
+.carga-moderada{background:rgba(180,83,9,.12);color:var(--warn);}
+/* ── Filtros de tabela ── */
+.tbl-filters{display:flex;align-items:center;gap:6px;padding:12px 20px;border-bottom:1px solid var(--s3);flex-wrap:wrap;}
+.tbl-filter-btn{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:5px;border:1px solid var(--s4);background:var(--s1);color:var(--ink3);cursor:pointer;transition:all .15s;}
+.tbl-filter-btn:hover{background:var(--s2);}
+.tbl-filter-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+.tbl-filter-btn.f-jogaram.active{background:var(--ok);border-color:var(--ok);}
+.tbl-filter-btn.f-nao.active{background:var(--ink3);border-color:var(--ink3);}
+.tbl-filter-btn.f-90.active{background:var(--risk);border-color:var(--risk);}
+/* ── Impacto frases ── */
+.impacto-frase{font-size:12px;color:var(--ink2);line-height:1.7;padding:14px 20px;border-top:1px solid var(--s3);}
+.impacto-frase span{font-weight:600;}
+.if-risk{color:var(--risk);}.if-warn{color:var(--warn);}.if-ok{color:var(--ok);}
+/* ── Carga média geral ── */
+.carga-geral-badge{font-family:var(--f-mono);font-size:9px;font-weight:700;letter-spacing:.6px;padding:3px 9px;border-radius:4px;}
+/* ── Jogo header improvements ── */
+.jogo-status-row{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;}
+.jogo-stat-pill{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.55);}
+
 </style>
 </head>
 <body>
@@ -599,9 +620,13 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
 
   <!-- JOGO HEADER -->
   <div class="jogo-header">
-    <div>
+    <div style="flex:1;min-width:0">
       <div class="jogo-adv" id="jogo-adv-label">vs Advers&aacute;rio</div>
-      <div class="jogo-info" id="jogo-info-label">Paulista A2 2026</div>
+      <div class="jogo-status-row">
+        <span class="jogo-stat-pill" id="jogo-data-pill">sem data</span>
+        <span class="jogo-stat-pill" id="jogo-comp-pill">Paulista A2 2026</span>
+        <span class="jogo-stat-pill" id="jogo-rodada-pill" style="display:none"></span>
+      </div>
     </div>
     <div class="jogo-placar">
       <input type="number" id="gols-pro" min="0" max="30" value="0"
@@ -641,6 +666,16 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
       <div class="kpi-val" id="kpi-totalmin">0</div>
       <div class="kpi-sub">carga equipe</div>
     </div>
+    <div class="kpi-cell kv-neu">
+      <div class="kpi-label">Entraram</div>
+      <div class="kpi-val" id="kpi-entraram">0</div>
+      <div class="kpi-sub">substitui&ccedil;&otilde;es</div>
+    </div>
+    <div class="kpi-cell kv-grey">
+      <div class="kpi-label">Banco s/ uso</div>
+      <div class="kpi-val" id="kpi-banco-nao">0</div>
+      <div class="kpi-sub">n&atilde;o entraram</div>
+    </div>
   </div>
 
   <!-- UTILIZAÇÃO -->
@@ -651,6 +686,13 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
         <button class="btn-secondary" onclick="preencherRapido()" style="font-size:9px;padding:4px 12px">&#9889; Preencher r&aacute;pido (11T)</button>
         <button class="btn-secondary" onclick="limparTudo()" style="font-size:9px;padding:4px 12px">&#8635; Limpar</button>
       </div>
+    </div>
+    <div class="tbl-filters">
+      <button class="tbl-filter-btn active" id="tf-todos"    onclick="setTblFilter('todos')">Todos</button>
+      <button class="tbl-filter-btn f-jogaram" id="tf-jogaram" onclick="setTblFilter('jogaram')">Jogaram</button>
+      <button class="tbl-filter-btn f-nao"     id="tf-nao"     onclick="setTblFilter('nao')">N&atilde;o jogaram</button>
+      <button class="tbl-filter-btn f-90"      id="tf-90"      onclick="setTblFilter('90')">90 min</button>
+      <span style="margin-left:auto;font-family:var(--f-mono);font-size:9px;color:var(--ink3)" id="tbl-count"></span>
     </div>
     <div style="overflow-x:auto">
       <table class="util-tbl">
@@ -697,6 +739,7 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
         <div class="imp-nomes" id="imp-fadiga-nomes">—</div>
       </div>
     </div>
+    <div class="impacto-frase" id="impacto-frases"></div>
   </div>
 
   <!-- OUTPUT CSV -->
@@ -727,6 +770,7 @@ var jogo = {
 
 // atletas importados do M5 / escalação
 var elenco = [];       // [{nome, posicao, grupo:'titular'|'banco'|'fora', score}]
+var tblFiltro = 'todos'; // 'todos'|'jogaram'|'nao'|'90'
 // registro de utilização {nome: {jogou, titular, minutos, entrou, saiu, obs}}
 var utilizacao = {};
 
@@ -821,6 +865,15 @@ function renderJogoHeader() {
     el2.textContent = jogo.competicao + (dataStr ? ' \u00b7 ' + dataStr : '');
   }
   atualizarResultado();
+  // Populate status pills
+  var dataPill = document.getElementById('jogo-data-pill');
+  if (dataPill) {
+    dataPill.textContent = jogo.data
+      ? new Date(jogo.data + 'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'})
+      : 'sem data';
+  }
+  var compPill = document.getElementById('jogo-comp-pill');
+  if (compPill) compPill.textContent = jogo.competicao || 'Campeonato';
 }
 
 function atualizarResultado() {
@@ -860,11 +913,33 @@ function toggleJogou(nome, el) {
 function toggleTitular(nome, el) {
   var u = getU(nome);
   u.titular = el.checked;
-  if (u.titular) { u.jogou = true; if (!u.minutos) u.minutos = 90; }
+  if (u.titular) {
+    u.jogou = true;
+    // Sugerir 90min se ainda não tem minutos registrados
+    if (!u.minutos) u.minutos = 90;
+  } else if (!u.jogou) {
+    // Se desmarcou titular e não está marcado como jogou → preservado
+    u.minutos = 0;
+  }
   syncRowUI(nome);
   atualizarKPIs();
   renderImpacto();
   renderOutput();
+}
+
+
+// ── Carga: 4 níveis (Alta/Moderada/Baixa/Preservado) ─────────────
+function cargaTxt4(min) {
+  if (min >= 80) return min + 'min \u2014 Alta';
+  if (min >= 60) return min + 'min \u2014 Moderada';
+  if (min > 0)   return min + 'min \u2014 Baixa';
+  return 'Preservado';
+}
+function cargaCls4(min) {
+  if (min >= 80) return 'carga-alta';
+  if (min >= 60) return 'carga-moderada';
+  if (min > 0)   return 'carga-baixa';
+  return 'carga-zero';
 }
 
 function setMinutos(nome, val) {
@@ -875,14 +950,9 @@ function setMinutos(nome, val) {
   // Carga pill
   var pill = document.getElementById('carga-' + sanitize(nome));
   if (pill) {
-    pill.textContent = u.minutos === 90 ? '90min \u2191\u2191' :
-                       u.minutos >= 60 ? u.minutos + 'min \u2191' :
-                       u.minutos > 0  ? u.minutos + 'min' : 'Preservado';
-    pill.className = 'carga-pill ' + (
-      u.minutos >= 90 ? 'carga-alta' :
-      u.minutos >= 60 ? 'carga-media' :
-      u.minutos > 0  ? 'carga-baixa' : 'carga-zero'
-    );
+    var ct = cargaTxt4(u.minutos), cc = cargaCls4(u.minutos);
+    pill.textContent = ct;
+    pill.className   = 'carga-pill ' + cc;
   }
   atualizarKPIs();
   renderImpacto();
@@ -915,15 +985,21 @@ function syncRowUI(nome) {
 function atualizarKPIs() {
   var jogaram   = elenco.filter(function(a) { return getU(a.nome).jogou; });
   var titulares = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && u.titular; });
-  var com90     = elenco.filter(function(a) { return getU(a.nome).minutos >= 90; });
+  var com90     = elenco.filter(function(a) { return getU(a.nome).minutos >= 80; });
   var preserv   = elenco.filter(function(a) { return !getU(a.nome).jogou; });
   var totalMin  = elenco.reduce(function(s, a) { return s + (getU(a.nome).minutos || 0); }, 0);
+  // Atletas que entraram (não eram titulares mas jogaram)
+  var entraram  = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && !u.titular; });
+  // Banco sem uso: preservados (sem jogo), excluindo titulares
+  var bancoNao  = elenco.filter(function(a) { var u=getU(a.nome); return !u.jogou && !u.titular; });
 
   setText('kpi-jogaram',   jogaram.length);
   setText('kpi-90',        com90.length);
   setText('kpi-preserv',   preserv.length);
   setText('kpi-totalmin',  totalMin);
   setText('kpi-titulares', titulares.length);
+  setText('kpi-entraram',  entraram.length);
+  setText('kpi-banco-nao', bancoNao.length);
 }
 
 function setText(id, val) {
@@ -933,22 +1009,46 @@ function setText(id, val) {
 
 // ── Impacto para próximo ciclo ──────────────────────────────────
 function renderImpacto() {
-  var com90    = elenco.filter(function(a) { return getU(a.nome).minutos >= 90; });
-  var entre60  = elenco.filter(function(a) { var m=getU(a.nome).minutos; return m>=60&&m<90; });
+  var alta     = elenco.filter(function(a) { return getU(a.nome).minutos >= 80; });
+  var moderada = elenco.filter(function(a) { var m=getU(a.nome).minutos; return m>=60&&m<80; });
+  var baixa    = elenco.filter(function(a) { var m=getU(a.nome).minutos; return m>0&&m<60; });
   var preserv  = elenco.filter(function(a) { return !getU(a.nome).jogou; });
-  var fadigaRisco = com90; // atletas com 90min = maior risco de fadiga
+  var jogaram  = elenco.filter(function(a) { return getU(a.nome).jogou; });
+  var totalMin = elenco.reduce(function(s,a){return s+(getU(a.nome).minutos||0);},0);
+  var mediaMin = jogaram.length ? Math.round(totalMin / jogaram.length) : 0;
 
-  setText('imp-carga-val',   com90.length);
+  // Cards
+  setText('imp-carga-val',   alta.length);
   setText('imp-preserv-val', preserv.length);
-  setText('imp-fadiga-val',  fadigaRisco.length);
+  setText('imp-fadiga-val',  alta.length);
 
-  var nomesC = com90.slice(0,6).map(function(a){return a.nome.split(' ')[0];}).join(', ');
-  var nomesP = preserv.slice(0,6).map(function(a){return a.nome.split(' ')[0];}).join(', ');
-  var nomesF = fadigaRisco.slice(0,6).map(function(a){return a.nome.split(' ')[0];}).join(', ');
+  var fn = function(arr){return arr.slice(0,5).map(function(a){return a.nome.split(' ')[0];}).join(', ')||'Nenhum';};
+  setText('imp-carga-nomes',   fn(alta));
+  setText('imp-preserv-nomes', fn(preserv));
+  setText('imp-fadiga-nomes',  fn(alta));
 
-  setText('imp-carga-nomes',   com90.length   ? nomesC : 'Nenhum');
-  setText('imp-preserv-nomes', preserv.length ? nomesP : 'Nenhum');
-  setText('imp-fadiga-nomes',  fadigaRisco.length ? nomesF : 'Nenhum');
+  // Frases automáticas
+  var frases = [];
+  if (alta.length === 1)
+    frases.push('<span class="if-risk">\u2022 1 atleta completou 90min e exige recupera\u00e7\u00e3o.</span>');
+  else if (alta.length > 1)
+    frases.push('<span class="if-risk">\u2022 ' + alta.length + ' atletas com carga alta (\u226580min) \u2014 recupera\u00e7\u00e3o priorit\u00e1ria.</span>');
+
+  if (moderada.length)
+    frases.push('<span class="if-warn">\u2022 ' + moderada.length + ' atletas com carga moderada (60\u201379min) \u2014 monitorar fadiga.</span>');
+
+  if (preserv.length)
+    frases.push('<span class="if-ok">\u2022 ' + preserv.length + ' atleta' + (preserv.length>1?'s':'') + ' preservado' + (preserv.length>1?'s':'') + ' \u2014 dispon\u00edveis para pr\u00f3ximo treino.</span>');
+
+  var nivelGeral = totalMin === 0 ? 'Nenhuma' :
+                   mediaMin >= 70 ? 'Alta' :
+                   mediaMin >= 45 ? 'Moderada' : 'Baixa';
+  frases.push('\u2022 Carga competitiva geral: <span class="' +
+    (nivelGeral==='Alta'?'if-risk':nivelGeral==='Moderada'?'if-warn':'if-ok') +
+    '">' + nivelGeral + '</span>' + (totalMin ? ' (m\u00e9dia ' + mediaMin + 'min por atleta que jogou).' : '.'));
+
+  var el = document.getElementById('impacto-frases');
+  if (el) el.innerHTML = frases.join('<br>');
 }
 
 // ── Output para sistema ─────────────────────────────────────────
@@ -1010,21 +1110,46 @@ function limparTudo() {
 }
 
 // ── Render tabela de utilização ─────────────────────────────────
+
+// ── Filtro de tabela ─────────────────────────────────────────────
+function setTblFilter(f) {
+  tblFiltro = f;
+  document.querySelectorAll('.tbl-filter-btn').forEach(function(b) {
+    b.classList.toggle('active', b.id === 'tf-' + f);
+  });
+  renderTabela();
+}
+
 function renderTabela() {
   var tbody = document.getElementById('util-tbody');
   if (!tbody) return;
   if (!elenco.length) { renderTabelaVazia(); return; }
 
-  tbody.innerHTML = elenco.map(function(a) {
+  // Apply filter + sort (jogaram first)
+  var lista = elenco.filter(function(a) {
+    var u = getU(a.nome);
+    if (tblFiltro === 'jogaram') return u.jogou;
+    if (tblFiltro === 'nao')     return !u.jogou;
+    if (tblFiltro === '90')      return u.minutos >= 80;
+    return true;
+  }).sort(function(a, b) {
+    var ua = getU(a.nome), ub = getU(b.nome);
+    // jogou first, then titular first, then by minutos desc
+    if (ua.jogou !== ub.jogou)       return ua.jogou ? -1 : 1;
+    if (ua.titular !== ub.titular)   return ua.titular ? -1 : 1;
+    return (ub.minutos || 0) - (ua.minutos || 0);
+  });
+
+  var countEl = document.getElementById('tbl-count');
+  if (countEl) countEl.textContent = lista.length + ' atleta' + (lista.length !== 1 ? 's' : '');
+
+  tbody.innerHTML = lista.map(function(a) {
     var sid = sanitize(a.nome);
     var u   = getU(a.nome);
     var rowCls = u.titular && u.jogou ? 'row-titular-row' :
                  !u.titular && u.jogou ? 'row-banco-row' : 'row-fora-row';
-    var cargaCls = u.minutos >= 90 ? 'carga-alta' : u.minutos >= 60 ? 'carga-media' :
-                   u.minutos > 0  ? 'carga-baixa' : 'carga-zero';
-    var cargaTxt = u.minutos >= 90 ? '90min \u2191\u2191' :
-                   u.minutos >= 60 ? u.minutos + 'min \u2191' :
-                   u.minutos > 0  ? u.minutos + 'min' : 'Preservado';
+    var cargaCls = cargaCls4(u.minutos);
+    var cargaTxt = cargaTxt4(u.minutos);
     return '<tr id="row-'+sid+'" class="'+rowCls+'">'
       + '<td><span class="pos-badge">'+a.posicao+'</span></td>'
       + '<td style="font-weight:600;color:var(--ink)">'+a.nome+'</td>'
