@@ -255,6 +255,70 @@ table.hist tr:last-child td{border-bottom:none;}
 .page-eyebrow{font-family:var(--f-mono);font-size:10px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
 .page-title{font-family:var(--f-display);font-size:26px;font-weight:700;color:var(--ink);letter-spacing:-.5px;margin-bottom:4px;}
 .page-sub{font-size:13px;color:var(--ink3);margin-bottom:0;}
+
+/* ═══ M2 DECISION PANEL ═══ */
+.decisao-principal{border-radius:var(--r);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.decisao-principal.dp-ok{background:var(--ok2);border:1.5px solid rgba(21,128,61,.22);}
+.decisao-principal.dp-warn{background:var(--warn2);border:1.5px solid rgba(180,83,9,.22);}
+.decisao-principal.dp-risk{background:var(--risk2);border:1.5px solid rgba(185,28,28,.22);}
+.dp-icon{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.dp-ok .dp-icon{background:rgba(21,128,61,.14);}.dp-warn .dp-icon{background:rgba(180,83,9,.14);}.dp-risk .dp-icon{background:rgba(185,28,28,.14);}
+.dp-icon svg{width:24px;height:24px;}.dp-ok .dp-icon svg{color:var(--ok);}.dp-warn .dp-icon svg{color:var(--warn);}.dp-risk .dp-icon svg{color:var(--risk);}
+.dp-body{flex:1;min-width:0;}
+.dp-label{font-family:var(--f-display);font-size:20px;font-weight:800;line-height:1;margin-bottom:4px;letter-spacing:-.3px;}
+.dp-ok .dp-label{color:var(--ok);}.dp-warn .dp-label{color:var(--warn);}.dp-risk .dp-label{color:var(--risk);}
+.dp-sub{font-size:12px;color:var(--ink2);line-height:1.5;}
+.dp-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.dp-tag{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:4px;}
+.dp-tag-ok{background:rgba(21,128,61,.12);color:var(--ok);}.dp-tag-warn{background:rgba(180,83,9,.12);color:var(--warn);}
+.dp-tag-risk{background:rgba(185,28,28,.12);color:var(--risk);}.dp-tag-info{background:var(--acc2);color:var(--accent);}
+.exec-resumo{background:var(--ink);color:#fff;border-radius:var(--r);padding:16px 20px;margin-bottom:16px;display:flex;gap:14px;align-items:flex-start;}
+.exec-resumo-icon{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.exec-resumo-icon svg{width:15px;height:15px;color:rgba(255,255,255,.6);}
+.exec-resumo-title{font-family:var(--f-mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.32);margin-bottom:4px;}
+.exec-resumo-text{font-size:13px;color:rgba(255,255,255,.88);line-height:1.6;}
+.risk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+@media(max-width:600px){.risk-grid{grid-template-columns:1fr;}}
+.risk-eixo{background:var(--s1);border:1px solid var(--s4);border-radius:var(--r);padding:16px;}
+.risk-eixo-label{font-family:var(--f-mono);font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px;}
+.risk-level{display:flex;align-items:center;gap:8px;}
+.risk-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.risk-dot-low{background:var(--ok);}.risk-dot-med{background:var(--warn);}.risk-dot-high{background:var(--risk);}
+.risk-level-label{font-family:var(--f-display);font-size:15px;font-weight:700;}
+.risk-low{color:var(--ok);}.risk-med{color:var(--warn);}.risk-high{color:var(--risk);}
+.risk-eixo-sub{font-size:11px;color:var(--ink3);margin-top:6px;line-height:1.4;}
+.disponib-bar{background:var(--s1);border:1px solid var(--s4);border-radius:var(--r);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.disponib-label{font-family:var(--f-mono);font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink3);white-space:nowrap;}
+.disponib-badge-lg{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-display);font-size:14px;font-weight:700;padding:6px 14px;border-radius:6px;}
+.db-ok{background:var(--ok2);color:var(--ok);}.db-lim{background:var(--warn2);color:var(--warn);}
+.db-reab{background:var(--risk2);color:var(--risk);}.db-susp{background:var(--risk2);color:var(--risk);}.db-pend{background:var(--gold2);color:var(--gold);}
+.db-dot{width:8px;height:8px;border-radius:50%;background:currentColor;}
+.disponib-detail{font-size:12px;color:var(--ink3);margin-left:auto;}
+.contexto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
+.ctx-card{background:var(--s1);border:1px solid var(--s4);border-radius:8px;padding:12px 14px;}
+.ctx-label{font-family:var(--f-mono);font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:5px;}
+.ctx-val{font-family:var(--f-display);font-size:16px;font-weight:700;color:var(--ink);line-height:1.2;}
+.ctx-sub{font-size:10px;color:var(--ink3);margin-top:3px;}
+.tendencia-card{background:var(--s1);border:1px solid var(--s4);border-radius:var(--r);padding:18px 22px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.tend-indicator{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;}
+.tend-arrow{font-size:28px;line-height:1;}
+.tend-label{font-family:var(--f-mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:600;}
+.tend-up-ok{color:var(--ok);}.tend-down-bad{color:var(--risk);}.tend-stable{color:var(--ink3);}
+.tend-body{flex:1;}.tend-title{font-family:var(--f-display);font-size:13px;font-weight:700;margin-bottom:4px;}
+.tend-desc{font-size:12px;color:var(--ink3);line-height:1.5;}
+.tend-scores{display:flex;align-items:center;gap:14px;margin-top:10px;}
+.tend-score-item{text-align:center;}
+.tend-score-num{font-family:var(--f-display);font-size:18px;font-weight:800;}
+.tend-score-lbl{font-family:var(--f-mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);}
+.rec-tecnica{background:var(--s2);border:1px solid var(--s4);border-radius:var(--r);padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;}
+.rec-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rec-ok .rec-icon{background:var(--ok2);}.rec-ok .rec-icon svg{color:var(--ok);}
+.rec-warn .rec-icon{background:var(--warn2);}.rec-warn .rec-icon svg{color:var(--warn);}
+.rec-risk .rec-icon{background:var(--risk2);}.rec-risk .rec-icon svg{color:var(--risk);}
+.rec-icon svg{width:18px;height:18px;}
+.rec-body{flex:1;}.rec-title{font-family:var(--f-mono);font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;}
+.rec-text{font-family:var(--f-display);font-size:14px;font-weight:700;color:var(--ink);}
+.sec-divider{font-family:var(--f-mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);padding:8px 0 6px;border-bottom:1px solid var(--s3);margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -295,6 +359,21 @@ table.hist tr:last-child td{border-bottom:none;}
 </div>
 
 <script>
+function calcRiscoFisico(sc){if(sc.tipoStatus==='reab')return 'alto';if(sc.tipoStatus==='alerta'||sc.pdor>=3)return 'medio';if(sc.score<48||sc.pdor>=1)return 'medio';return 'baixo';}
+function calcRiscoClinico(clinical){if(!clinical)return 'baixo';if(clinical.bloqueio)return 'alto';if(clinical.status==='limitado')return 'medio';if(clinical.diasRetReal!==null&&clinical.diasRetReal<=7)return 'medio';if(clinical.diasLesao!==null&&clinical.diasLesao<=30)return 'medio';return 'baixo';}
+function calcRiscoCompetitivo(disciplina){if(!disciplina)return 'baixo';if(disciplina.suspenso)return 'alto';if(disciplina.pendurado)return 'medio';return 'baixo';}
+function riscoLabel(n){if(n==='alto')return{cls:'risk-high',dot:'risk-dot-high',label:'Alto'};if(n==='medio')return{cls:'risk-med',dot:'risk-dot-med',label:'M\u00e9dio'};return{cls:'risk-low',dot:'risk-dot-low',label:'Baixo'};}
+function buildAlertas(sc,clinical,disciplina){var t=[];if(sc.tipoStatus==='reab')t.push({tipo:'risk',m:'NSP: Reabilita\u00e7\u00e3o'});else if(sc.tipoStatus==='alerta')t.push({tipo:'warn',m:'NSP: Alerta'});if(sc.pdor>=3)t.push({tipo:'risk',m:sc.pdor+' pts de dor'});else if(sc.pdor>=1)t.push({tipo:'warn',m:sc.pdor+' pt dor'});if(clinical&&clinical.diasRetReal!==null&&clinical.diasRetReal<=7)t.push({tipo:'warn',m:'Retorno '+clinical.diasRetReal+'d'});else if(clinical&&clinical.diasLesao!==null&&clinical.diasLesao<=30)t.push({tipo:'warn',m:'Les\u00e3o '+clinical.diasLesao+'d'});if(disciplina&&disciplina.suspenso)t.push({tipo:'risk',m:'Suspenso'});else if(disciplina&&disciplina.pendurado)t.push({tipo:'warn',m:'Pendurado'});return t;}
+function buildResumoExecutivo(sc,clinical,disciplina,disponibilidade,scoreTrend){var p=[];if(disponibilidade.bloqueio){p.push(disciplina&&disciplina.suspenso?'Suspenso por cart\u00f5es':'Em reabilita\u00e7\u00e3o');}else if(disponibilidade.status==='Limitado'){p.push('Disponibilidade limitada');}else{p.push('Atleta dispon\u00edvel');}p.push(sc.classe==='OK'?'com score de performance elevado':sc.classe==='Aten\u00e7\u00e3o'?'com score em zona de aten\u00e7\u00e3o':'com score baixo');if(scoreTrend==='up')p.push('e tend\u00eancia positiva recente');else if(scoreTrend==='down')p.push('e queda recente de performance');else p.push('sem varia\u00e7\u00e3o relevante');if(clinical&&clinical.diasRetReal!==null&&clinical.diasRetReal<=7)p.push('Retorno recente exige controle de carga');else if(clinical&&clinical.diasLesao!==null&&clinical.diasLesao<=30)p.push('Les\u00e3o recente \u2014 monitorar');if(disciplina&&disciplina.pendurado)p.push('Pendurado no campeonato');return p[0].charAt(0).toUpperCase()+p[0].slice(1)+', '+p.slice(1).join('. ')+'.';}
+function buildDecisaoPrincipal(sc,disponibilidade){if(disponibilidade.bloqueio){return{cls:'dp-risk',tipo:'risk',label:disponibilidade.status==='Suspenso'?'Suspenso':'N\u00e3o escalar',sub:disponibilidade.status==='Suspenso'?'Atleta suspenso por cart\u00f5es \u2014 indispon\u00edvel competitivamente':'Atleta em reabilita\u00e7\u00e3o \u2014 n\u00e3o utilizar em jogo'};}if(sc.decType==='ok')return{cls:'dp-ok',tipo:'ok',label:'Pronto 90min',sub:'Atleta em condi\u00e7\u00f5es plenas de jogo'};if(sc.decType==='warn')return{cls:'dp-warn',tipo:'warn',label:'Gerir minutos',sub:'Utilizar com controle de carga \u2014 45 a 70 min'};return{cls:'dp-risk',tipo:'risk',label:'N\u00e3o escalar',sub:'Condi\u00e7\u00f5es f\u00edsicas ou cl\u00ednicas impedem utiliza\u00e7\u00e3o'};}
+function renderDecisaoPrincipal(dp,tags){var icons={ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',risk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'};var tagsHtml=tags.length?'<div class="dp-tags">'+tags.map(function(t){return'<span class="dp-tag dp-tag-'+t.tipo+'">'+t.m+'</span>';}).join('')+'</div>':'';return'<div class="decisao-principal '+dp.cls+'"><div class="dp-icon">'+icons[dp.tipo]+'</div><div class="dp-body"><div class="dp-label">'+dp.label+'</div><div class="dp-sub">'+dp.sub+'</div>'+tagsHtml+'</div></div>';}
+function renderRiscoEixos(rf,rc,rcomp){function eixo(titulo,nivel,subs){var r=riscoLabel(nivel);return'<div class="risk-eixo"><div class="risk-eixo-label">'+titulo+'</div><div class="risk-level"><div class="risk-dot '+r.dot+'"></div><span class="risk-level-label '+r.cls+'">'+r.label+'</span></div><div class="risk-eixo-sub">'+(subs[nivel]||'')+'</div></div>';}return'<div class="risk-grid">'+eixo('Risco F\u00edsico',rf,{alto:'Limita\u00e7\u00e3o f\u00edsica significativa',medio:'Monitorar carga e dor',baixo:'Condi\u00e7\u00f5es f\u00edsicas adequadas'})+eixo('Risco Cl\u00ednico',rc,{alto:'Restri\u00e7\u00e3o cl\u00ednica ativa',medio:'Hist\u00f3rico recente de les\u00e3o',baixo:'Sem alertas cl\u00ednicos'})+eixo('Risco Competitivo',rcomp,{alto:'Suspenso por cart\u00f5es',medio:'Pendurado \u2014 risco de suspens\u00e3o',baixo:'Sem restri\u00e7\u00f5es disciplinares'})+'</div>';}
+function renderTendencia(scoreTrend,scoreHist,sc){var avg=scoreHist.length?Math.round(scoreHist.slice(-3).reduce(function(a,b){return a+b;},0)/Math.min(3,scoreHist.length)):sc.score;var arrow,tcls,tlbl,desc;if(scoreTrend==='up'){arrow='\u2197';tcls='tend-up-ok';tlbl='Melhorando';desc='Evolu\u00e7\u00e3o positiva nos \u00faltimos registros';}else if(scoreTrend==='down'){arrow='\u2198';tcls='tend-down-bad';tlbl='Piorando';desc='Queda recente exige aten\u00e7\u00e3o';}else{arrow='\u2192';tcls='tend-stable';tlbl='Est\u00e1vel';desc='Sem varia\u00e7\u00e3o relevante';}var sc2=function(v){return v>=72?'var(--ok)':v>=48?'var(--warn)':'var(--risk)';};return'<div class="tendencia-card"><div class="tend-indicator"><div class="tend-arrow '+tcls+'">'+arrow+'</div><div class="tend-label '+tcls+'">'+tlbl+'</div></div><div class="tend-body"><div class="tend-title">Tend\u00eancia de Performance</div><div class="tend-desc">'+desc+'</div><div class="tend-scores"><div class="tend-score-item"><div class="tend-score-num" style="color:'+sc2(sc.score)+'">'+sc.score+'</div><div class="tend-score-lbl">Score atual</div></div><div style="color:var(--ink3);font-size:16px">\u2192</div><div class="tend-score-item"><div class="tend-score-num" style="color:'+sc2(avg)+'">'+avg+'</div><div class="tend-score-lbl">M\u00e9dia recente</div></div></div></div></div>';}
+function renderRecTecnica(sc,disponibilidade){var tipo,texto;if(disponibilidade.bloqueio){tipo='risk';texto=disponibilidade.status==='Suspenso'?'N\u00e3o utilizar \u2014 suspenso':'N\u00e3o utilizar \u2014 reabilitar';}else if(sc.decType==='ok'){tipo='ok';texto='Escalar normalmente';}else if(sc.decType==='warn'){tipo='warn';texto='Escalar com controle de minutos';}else{tipo='risk';texto='N\u00e3o utilizar';}var icons={ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',risk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'};return'<div class="rec-tecnica rec-'+tipo+'"><div class="rec-icon">'+icons[tipo]+'</div><div class="rec-body"><div class="rec-title">Recomenda\u00e7\u00e3o T\u00e9cnica</div><div class="rec-text">'+texto+'</div></div></div>';}
+function renderDisponibBar(disponibilidade,disciplina){var dispMap={'Dispon\u00edvel':'db-ok','Limitado':'db-lim','Reabilita\u00e7\u00e3o':'db-reab','Suspenso':'db-susp','Pendurado':'db-pend'};var cls=dispMap[disponibilidade.status]||'db-ok';var detail='';if(disciplina&&disciplina.amarelos>0)detail=disciplina.amarelos+' amarelo'+(disciplina.amarelos>1?'s':'');if(disciplina&&disciplina.vermelhos>0)detail+=(detail?' | ':'')+disciplina.vermelhos+' vermelho'+(disciplina.vermelhos>1?'s':'');return'<div class="disponib-bar"><span class="disponib-label">Disponibilidade</span><span class="disponib-badge-lg '+cls+'"><div class="db-dot"></div>'+disponibilidade.status+'</span>'+(detail?'<span class="disponib-detail">'+detail+'</span>':'')+'</div>';}
+function renderContexto(sc,pos,clinical){var scoreC=sc.score>=72?'var(--ok)':sc.score>=48?'var(--warn)':'var(--risk)';var cards=[{l:'Score M1',v:'<span style="color:'+scoreC+';font-size:22px;font-weight:800">'+sc.score+'</span>',s:sc.classe},{l:'Status NSP',v:sc.status||'Sem reg.',s:sc.tipoStatus==='apronto'?'Pronto':sc.tipoStatus==='alerta'?'Alerta':'Reabilita\u00e7\u00e3o'},{l:'Posi\u00e7\u00e3o',v:pos,s:''},{l:'Dor / Pontos',v:sc.pdor>0?sc.pdor+' pts':'0',s:sc.pdor>=3?'Risco':sc.pdor>=1?'Aten\u00e7\u00e3o':'OK'}];if(clinical&&clinical.tipoLesao)cards.push({l:'\u00daltima les\u00e3o',v:clinical.tipoLesao,s:clinical.diasLesao?clinical.diasLesao+'d':''});else cards.push({l:'Hist\u00f3rico cl\u00ednico',v:'Sem restri\u00e7\u00f5es',s:''});return'<div class="contexto-grid">'+cards.map(function(c){return'<div class="ctx-card"><div class="ctx-label">'+c.l+'</div><div class="ctx-val">'+c.v+'</div>'+(c.s?'<div class="ctx-sub">'+c.s+'</div>':'')+'</div>';}).join('')+'</div>';}
+
+
 var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
 var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
@@ -808,6 +887,15 @@ function carregarAtleta() {
     var fadTrend = detectTrend(wHist.map(function(w){return w.fad;}));
     var scoreTrend = detectTrend(scoreHist);
 
+    // --- NOVOS BLOCOS DECISÓRIOS ---
+    var _alertas     = buildAlertas(sc, clinical, disciplina);
+    var _dp          = buildDecisaoPrincipal(sc, disponibilidade);
+    var _resumo      = buildResumoExecutivo(sc, clinical, disciplina, disponibilidade, scoreTrend);
+    var _riscoFis    = calcRiscoFisico(sc);
+    var _riscoClin   = calcRiscoClinico(clinical);
+    var _riscoComp   = calcRiscoCompetitivo(disciplina);
+
+
     // Próximo jogo pill
     var jogoPill = '';
     if (PROX_JOGO && PROX_JOGO.dias !== null) {
@@ -857,7 +945,25 @@ function carregarAtleta() {
         '</div>' +
       '</div>' +
 
-      // DECISION
+      // DECISÃO PRINCIPAL
+      renderDecisaoPrincipal(_dp, _alertas) +
+
+      // RESUMO EXECUTIVO
+      '<div class="exec-resumo">'
+        + '<div class="exec-resumo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
+        + '<div><div class="exec-resumo-title">Resumo Executivo</div><div class="exec-resumo-text">' + _resumo + '</div></div>'
+      + '</div>' +
+
+      // EIXOS DE RISCO
+      renderRiscoEixos(_riscoFis, _riscoClin, _riscoComp) +
+
+      // DISPONIBILIDADE
+      renderDisponibBar(disponibilidade, disciplina) +
+
+      // CONTEXTO
+      renderContexto(sc, pos, clinical) +
+
+      // DECISION (original — hidden, new blocks replace it)
       '<div class="decision-section">' +
         '<div class="decision-header">' +
           '<div class="section-title">Decis\u00e3o de Escalona\u00e7\u00e3o</div>' +
@@ -875,6 +981,14 @@ function carregarAtleta() {
         '<div class="kpi-card"><div class="kpi-label">Humor</div><div class="kpi-val">'+(lastW?lastW.hum.toFixed(1):'\u2014')+'</div><div class="kpi-sub">Humor</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">A \u00b7 B \u00b7 C \u00b7 D</div><div class="kpi-val" style="font-size:14px">'+sc.A+'&nbsp;'+sc.B+'&nbsp;'+sc.C+'&nbsp;'+sc.D+'</div><div class="kpi-sub">Score M1</div></div>' +
       '</div>' +
+
+      // TENDÊNCIA
+      renderTendencia(scoreTrend, scoreHist, sc) +
+
+      // RECOMENDAÇÃO TÉCNICA
+      renderRecTecnica(sc, disponibilidade) +
+
+      '<div class="sec-divider">Hist\u00f3rico</div>' +
 
       // CHARTS
       '<div class="charts-row">' +
