@@ -314,6 +314,26 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
 .disp-reab      {background:var(--risk2);color:var(--risk);}
 .disp-suspenso  {background:var(--risk2);color:var(--risk);}
 .disp-pendurado {background:var(--gold2);color:var(--gold);}
+
+/* ── Impacto Pós-Jogo bar ── */
+.posj-bar{display:none;align-items:center;gap:10px;padding:9px 16px;
+  border-radius:8px;margin-bottom:14px;
+  background:rgba(37,99,235,.07);border:1.5px solid rgba(37,99,235,.18);}
+.posj-bar.show{display:flex;}
+.posj-txt{font-family:var(--f-mono);font-size:10px;font-weight:600;
+  letter-spacing:.4px;color:var(--accent);flex:1;}
+.posj-sub{font-size:10px;color:var(--ink3);}
+.posj-reset{font-family:var(--f-mono);font-size:9px;font-weight:600;
+  letter-spacing:.4px;padding:3px 10px;border-radius:5px;
+  border:1px solid rgba(185,28,28,.3);background:rgba(185,28,28,.06);
+  color:var(--risk);cursor:pointer;white-space:nowrap;transition:all .15s;}
+.posj-reset:hover{background:rgba(185,28,28,.12);}
+/* ── Score delta pill (tabela) ── */
+.score-posj{font-family:var(--f-mono);font-size:9px;font-weight:700;
+  padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;}
+.score-posj-neg{background:rgba(185,28,28,.10);color:var(--risk);}
+.score-posj-pos{background:rgba(21,128,61,.10);color:var(--ok);}
+
 </style>
 </head>
 <body>
@@ -345,6 +365,16 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
     <div class="page-title">Status de Performance do Elenco</div>
     <div class="page-date"><span id="hdr-sub">Carregando dados&hellip;</span></div>
   <div id="prox-jogo-label" style="font-size:11px;color:#888;letter-spacing:.5px;margin-top:3px;min-height:16px"></div>
+  </div>
+
+  <!-- PÓS-JOGO IMPACT BAR -->
+  <div class="posj-bar" id="posj-bar">
+    <span style="font-size:14px;flex-shrink:0">&#9889;</span>
+    <div style="flex:1">
+      <div class="posj-txt" id="posj-txt">Impacto p&oacute;s-jogo aplicado</div>
+      <div class="posj-sub" id="posj-sub"></div>
+    </div>
+    <button class="posj-reset" onclick="resetarImpactoPosJogo()">&#215; Resetar impacto</button>
   </div>
 
   <div class="kpi-row" id="kpi-strip">
@@ -828,7 +858,8 @@ function setTableState(state, msg) {
 //  4. C\u00C1LCULO DO SCORE M1
 // ====================================================================
 
-var dadosAtletas = [];
+var dadosAtletas    = [];
+var posJogoAplicado = false; // flag: impacto M6 já aplicado nesta sessão
 var filtroAtual  = 'todos';
 var sortCol      = 'score';
 var sortDir      = -1;
@@ -994,6 +1025,66 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
 
 
 
+
+// ── Integração M6 → M1: Impacto Pós-Jogo ────────────────────────
+function aplicarImpactoPosJogo() {
+  if (posJogoAplicado) return; // só 1 vez por sessão
+
+  var raw;
+  try { raw = localStorage.getItem('osasco_post_impact'); } catch(e) { return; }
+  if (!raw) return;
+
+  var impact;
+  try { impact = JSON.parse(raw); } catch(e) { return; }
+  if (!Array.isArray(impact) || !impact.length) return;
+
+  // Mapa nome normalizado → impactoScore
+  var impMap = {};
+  impact.forEach(function(row) {
+    if (row.nome) impMap[normalizarNome(row.nome)] = { delta: row.impactoScore || 0, min: row.minutos || 0 };
+  });
+
+  var aplicados = 0, totalDelta = 0;
+  dadosAtletas.forEach(function(a) {
+    var entry = impMap[normalizarNome(a.nome)];
+    if (entry === undefined) return;
+    var delta = entry.delta;
+    a.score = Math.max(0, Math.min(100, (a.score || 0) + delta));
+    // Reclassificar com novo score
+    a.classe = a.score >= 72 ? 'OK' : a.score >= 48 ? 'Aten\u00e7\u00e3o' : 'Risco';
+    a._posJogoDelta = delta;   // para pill na tabela
+    a._posJogoMin   = entry.min;
+    aplicados++;
+    totalDelta += delta;
+  });
+
+  if (!aplicados) return;
+
+  dadosAtletas.sort(function(a, b) { return b.score - a.score; });
+  posJogoAplicado = true;
+
+  // Mostrar bar
+  var bar = document.getElementById('posj-bar');
+  if (bar) bar.classList.add('show');
+  var txt = document.getElementById('posj-txt');
+  if (txt) txt.textContent = '\u26a1 Impacto p\u00f3s-jogo aplicado \u2014 ' +
+    aplicados + ' atleta' + (aplicados > 1 ? 's' : '') + ' atualizados';
+  var sub = document.getElementById('posj-sub');
+  if (sub) sub.textContent = (totalDelta >= 0 ? '+' : '') + totalDelta +
+    ' pts no elenco \u00b7 Clique em "Resetar impacto" para desfazer';
+}
+
+// ── Resetar impacto (limpa localStorage + reinicia) ───────────────
+function resetarImpactoPosJogo() {
+  try { localStorage.removeItem('osasco_post_impact'); } catch(e) {}
+  try { localStorage.removeItem('osasco_post_game'); } catch(e) {}
+  posJogoAplicado = false;
+  dadosAtletas.forEach(function(a) { delete a._posJogoDelta; delete a._posJogoMin; });
+  var bar = document.getElementById('posj-bar');
+  if (bar) bar.classList.remove('show');
+  iniciar(); // recarrega do zero
+}
+
 function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
   epiRows = _epiRows || [];
   cartoes = _cartoes || CARTOES_MOCK;
@@ -1003,6 +1094,9 @@ function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
   dadosAtletas = cadastro.map(r => {
     return calcularScore(r['Nome'], nspData, desempRows, mapeamento);
   }).sort((a, b) => b.score - a.score);
+
+  // Integração M6→M1: aplicar impacto pós-jogo se disponível
+  aplicarImpactoPosJogo();
 
   atualizarKPIs();
   renderTabela();
@@ -1182,7 +1276,11 @@ function renderTabela() {
       <td><span class="name-cell">${a.nome}</span></td>
       <td>
         <div class="score-cell">
-          <span class="score-num ${scoreClass}">${a.score}</span>
+          <span class="score-num ${scoreClass}">${a.score}</span>${
+            a._posJogoDelta !== undefined
+              ? `<span class="score-posj ${a._posJogoDelta < 0 ? 'score-posj-neg' : 'score-posj-pos'}">${a._posJogoDelta > 0 ? '+' : ''}${a._posJogoDelta}</span>`
+              : ''
+          }
           <div class="score-bar-bg"><div class="score-bar-fill" style="width:${a.score}%;background:${barColor}"></div></div>
         </div>
       </td>
