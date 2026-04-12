@@ -426,6 +426,19 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
 /* ── Resumo extra rows ── */
 .resumo-row-sm{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:var(--ink3);}
 
+
+/* ── Override badge variants ── */
+.override-badge.ov-critico{background:var(--risk2);color:var(--risk);}
+.override-badge.ov-leve   {background:var(--warn2);color:var(--warn);}
+/* ── Sug motivo sub-label ── */
+.sug-motivo{display:block;font-family:var(--f-mono);font-size:8px;
+  letter-spacing:.3px;color:var(--ink3);margin-top:2px;line-height:1.3;}
+/* ── Reset button ── */
+.reset-btn{font-family:var(--f-mono);font-size:10px;letter-spacing:.6px;
+  padding:5px 12px;border-radius:6px;border:1.5px solid var(--risk);
+  background:var(--risk3);color:var(--risk);cursor:pointer;transition:all .15s;}
+.reset-btn:hover{background:var(--risk2);}
+
 </style>
 </head>
 <body>
@@ -539,6 +552,7 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
         <button class="ctx-btn ctx-jogo"      data-ctx="jogo" onclick="setContextJogo('jogo')">Jogo</button>
       </div>
       <button class="suggest-btn" onclick="aplicarSugestoes()">&#9889; Gerar escala&ccedil;&atilde;o autom&aacute;tica</button>
+      <button class="reset-btn" onclick="resetarEscalacao()">&#8635; Resetar</button>
     </div>
   </div>
 
@@ -1233,6 +1247,17 @@ document.addEventListener('click', function(e) {
   if (!isNaN(idx) && val) decidir(idx, val);
 });
 
+
+// ─── Resetar todas as decisões e regerar ─────────────────────────────────
+function resetarEscalacao() {
+  decisoes = {};
+  recalcularSugestoes();
+  atualizarKPIs();
+  renderTabela();
+  renderRelacionados();
+  renderResumoEscalacao();
+}
+
 function aplicarSugestoes() {
   recalcularSugestoes();
 
@@ -1290,11 +1315,17 @@ function sortBy(col){
 
 /* ── Sector order helpers ── */
 var POS_ORDER = {
-  GK:1, GOL:1, GL:1,
-  ZAG:2, LD:3, LE:3, LAT:3, LDB:3, LDE:3,
-  VOL:4, MC:5, MEI:5, MO:6, MAI:6,
-  EXT:7, ALA:7, PNT:8, SS:8, SA:8, ATK:9, ATA:9, CA:9
+  GK:1, GOL:1, GL:1, GR:1,
+  ZAG:2, CB:2,
+  LD:3, LE:3, LAT:3, LDB:3, LDE:3, RB:3, LB:3,
+  VOL:4, DV:4,
+  MC:5, MEI:5, CM:5,
+  MO:6, MAI:6, CAM:6, AM:6,
+  EXT:7, ALA:7, RW:7, LW:7,
+  PNT:8, SS:8, SA:8, CF:8,
+  ATK:9, ATA:9, CA:9, ST:9
 };
+var SECTOR_NAMES = {1:'GK',2:'Defesa',3:'Lateral',4:'Volante',5:'Meio',6:'Meia ofensivo',7:'Extremo',8:'Ponta',9:'Atacante'};
 function getPosOrder(pos) {
   var p = (pos || '').toUpperCase().replace(/[-\/\s]/g, '');
   return POS_ORDER[p] || 5;
@@ -1355,9 +1386,22 @@ function renderTabela(){
     }
     if(!ahtml) ahtml = '<span style="color:var(--ink4);font-size:11px">\u2014</span>';
 
-    var sugTitle = sug.motivo ? (' title="'+sug.motivo+'"') : '';
-    var sugHtml  = '<span class="sug-label '+sug.cls+'"'+sugTitle+'>'+sug.label+'</span>';
-    if(diverge) sugHtml += '<span class="div-flag" title="Diverge: '+sug.label+'">!</span>';
+    // Sugestão com motivo como sub-linha
+    var motStr  = sug.motivo ? sug.motivo : '';
+    var sugHtml = '<span class="sug-label '+sug.cls+'" title="'+motStr+'">'
+      + sug.label
+      + '</span>'
+      + (motStr ? '<span class="sug-motivo">'+motStr+'</span>' : '');
+
+    // Override badge: crítico se vai contra bloqueio ou M2; leve nos demais
+    if (diverge) {
+      var ovCritico = (sug.bloqueio)
+        || (sug.valor === 'fora' && (dec === 'titular' || dec === 'banco'))
+        || (dec === 'titular' && sug.valor === 'fora');
+      var ovCls = ovCritico ? 'override-badge ov-critico' : 'override-badge ov-leve';
+      var ovTxt = ovCritico ? 'Override cr\u00edtico' : 'Override manual';
+      sugHtml += '<span class="div-flag '+(ovCritico?'t-danger':'t-warn')+'" title="'+ovTxt+': sugest\u00e3o era '+sug.label+'">!</span>';
+    }
 
     var idx  = dadosAtletas.indexOf(a);
     var btnT, btnB, btnF;
@@ -1372,14 +1416,16 @@ function renderTabela(){
 
     // Sector divider row
     if (ri === 0 || getPosOrder(lista[ri-1].posicao) !== getPosOrder(a.posicao)) {
-      var sectorNames = ['','GK','Defesa','Defesa','Defesa','Meio','Meio','Meio','Ataque','Ataque'];
-      var sIdx = Math.min(getPosOrder(a.posicao), sectorNames.length-1);
-      var sName = sectorNames[sIdx] || a.posicao;
+      var sIdx = getPosOrder(a.posicao);
+      var sName = (typeof SECTOR_NAMES !== 'undefined' && SECTOR_NAMES[sIdx]) || a.posicao || 'Outros';
       rows.push('<tr class="sector-row"><td colspan="9">'+sName+'</td></tr>');
     }
 
     // Override badge if manual decision differs from suggestion
-    var overrideBadge = diverge ? '<span class="override-badge">Override manual</span>' : '';
+    var ovBloq = sug.bloqueio || (sug.valor === 'fora' && (dec === 'titular' || dec === 'banco'));
+    var overrideBadge = diverge
+      ? '<span class="override-badge '+(ovBloq?'ov-critico':'ov-leve')+'">'+(ovBloq?'Override cr\u00edtico':'Override')+'</span>'
+      : '';
 
     rows.push(
       '<tr class="'+rowCls+'">'
