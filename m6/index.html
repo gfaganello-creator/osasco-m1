@@ -896,8 +896,16 @@ function atualizarResultado() {
 function toggleJogou(nome, el) {
   var u = getU(nome);
   u.jogou = el.checked;
-  if (!u.jogou) { u.minutos = 0; u.titular = false; u.entrou = false; u.saiu = false; }
-  else if (u.titular) u.minutos = 90;
+  if (!u.jogou) {
+    // jogou = não → zerar tudo
+    u.minutos = 0;
+    u.titular = false;
+    u.entrou  = false;
+    u.saiu    = false;
+  } else if (u.titular && !u.minutos) {
+    // jogou = sim e era titular → sugerir 90min
+    u.minutos = 90;
+  }
   var row = document.getElementById('row-' + sanitize(nome));
   if (row) {
     row.classList.toggle('row-titular-row', u.titular && u.jogou);
@@ -929,16 +937,22 @@ function toggleTitular(nome, el) {
 
 
 // ── Carga: 4 níveis (Alta/Moderada/Baixa/Preservado) ─────────────
+function cargaLabel(min) {
+  if (min >= 75) return 'Alta';
+  if (min >= 30) return 'Moderada';
+  if (min >= 1)  return 'Baixa';
+  return 'Preservado';
+}
 function cargaTxt4(min) {
-  if (min >= 80) return min + 'min \u2014 Alta';
-  if (min >= 60) return min + 'min \u2014 Moderada';
-  if (min > 0)   return min + 'min \u2014 Baixa';
+  if (min >= 75) return min + 'min \u2014 Alta';
+  if (min >= 30) return min + 'min \u2014 Moderada';
+  if (min >= 1)  return min + 'min \u2014 Baixa';
   return 'Preservado';
 }
 function cargaCls4(min) {
-  if (min >= 80) return 'carga-alta';
-  if (min >= 60) return 'carga-moderada';
-  if (min > 0)   return 'carga-baixa';
+  if (min >= 75) return 'carga-alta';
+  if (min >= 30) return 'carga-moderada';
+  if (min >= 1)  return 'carga-baixa';
   return 'carga-zero';
 }
 
@@ -946,13 +960,16 @@ function setMinutos(nome, val) {
   var u = getU(nome);
   var v = parseInt(val) || 0;
   u.minutos = Math.min(120, Math.max(0, v));
+  // Recalcular carga automaticamente
+  u.carga = cargaLabel(u.minutos);
+  // Se minutos > 0 → implica jogou = true
   if (u.minutos > 0) u.jogou = true;
-  // Carga pill
+  // Se minutos = 0 → preservado (mas manter jogou como está, user pode ter desmarcado)
+  // Atualizar pill na linha
   var pill = document.getElementById('carga-' + sanitize(nome));
   if (pill) {
-    var ct = cargaTxt4(u.minutos), cc = cargaCls4(u.minutos);
-    pill.textContent = ct;
-    pill.className   = 'carga-pill ' + cc;
+    pill.textContent = cargaTxt4(u.minutos);
+    pill.className   = 'carga-pill ' + cargaCls4(u.minutos);
   }
   atualizarKPIs();
   renderImpacto();
@@ -985,21 +1002,23 @@ function syncRowUI(nome) {
 function atualizarKPIs() {
   var jogaram   = elenco.filter(function(a) { return getU(a.nome).jogou; });
   var titulares = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && u.titular; });
-  var com90     = elenco.filter(function(a) { return getU(a.nome).minutos >= 80; });
+  var cargaAlta = elenco.filter(function(a) { return getU(a.nome).minutos >= 75; });
   var preserv   = elenco.filter(function(a) { return !getU(a.nome).jogou; });
-  var totalMin  = elenco.reduce(function(s, a) { return s + (getU(a.nome).minutos || 0); }, 0);
-  // Atletas que entraram (não eram titulares mas jogaram)
+  // Total min: somar APENAS atletas que jogaram (minutos > 0)
+  var totalMin  = jogaram.reduce(function(s, a) { return s + (getU(a.nome).minutos || 0); }, 0);
   var entraram  = elenco.filter(function(a) { var u=getU(a.nome); return u.jogou && !u.titular; });
-  // Banco sem uso: preservados (sem jogo), excluindo titulares
   var bancoNao  = elenco.filter(function(a) { var u=getU(a.nome); return !u.jogou && !u.titular; });
 
   setText('kpi-jogaram',   jogaram.length);
-  setText('kpi-90',        com90.length);
+  setText('kpi-90',        cargaAlta.length);
   setText('kpi-preserv',   preserv.length);
-  setText('kpi-totalmin',  totalMin);
+  setText('kpi-totalmin',  totalMin > 0 ? totalMin : (jogaram.length ? '\u2014' : 0));
   setText('kpi-titulares', titulares.length);
   setText('kpi-entraram',  entraram.length);
   setText('kpi-banco-nao', bancoNao.length);
+
+  // Atualiza POST_GAME_DATA sempre que KPIs mudam
+  publicarPostGameData();
 }
 
 function setText(id, val) {
@@ -1058,7 +1077,7 @@ function renderOutput() {
   lines.push('# Placar: ' + jogo.golsPro + ' x ' + jogo.golsContra +
     ' (' + (jogo.resultado === 'v' ? 'Vit\u00f3ria' : jogo.resultado === 'd' ? 'Derrota' : 'Empate') + ')');
   lines.push('');
-  lines.push('atleta_nome,titular,minutos,obs');
+  lines.push('atleta_nome,titular,minutos,carga,obs');
   elenco.forEach(function(a) {
     var u = getU(a.nome);
     if (u.jogou) {
@@ -1066,12 +1085,42 @@ function renderOutput() {
         a.nome,
         u.titular ? 'S' : 'N',
         u.minutos,
+        cargaLabel(u.minutos),
         u.obs || ''
       ].join(','));
     }
   });
   var pre = document.getElementById('output-csv');
   if (pre) pre.textContent = lines.join('\n');
+  publicarPostGameData();
+}
+
+
+// ── Publicar dados para integração M1 ────────────────────────────
+function publicarPostGameData() {
+  var atletas = elenco.map(function(a) {
+    var u = getU(a.nome);
+    return {
+      nome:    a.nome,
+      minutos: u.minutos || 0,
+      carga:   cargaLabel(u.minutos || 0),
+      jogou:   u.jogou   || false,
+      titular: u.titular || false
+    };
+  });
+  window.POST_GAME_DATA = {
+    data:       jogo.data || new Date().toISOString().slice(0, 10),
+    adversario: jogo.adversario,
+    competicao: jogo.competicao,
+    golsPro:    jogo.golsPro,
+    golsContra: jogo.golsContra,
+    resultado:  jogo.resultado,
+    atletas:    atletas
+  };
+  // Também persiste em localStorage para que M1 possa ler
+  try {
+    localStorage.setItem('osasco_post_game', JSON.stringify(window.POST_GAME_DATA));
+  } catch(e) {}
 }
 
 function copiarOutput() {
@@ -1195,6 +1244,7 @@ document.addEventListener('DOMContentLoaded', function() {
   atualizarKPIs();
   renderImpacto();
   renderOutput();
+  publicarPostGameData();
 });
 
 </script>
