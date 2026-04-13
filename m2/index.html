@@ -869,43 +869,60 @@ async function iniciarM2() {
     // ─────────────────────────────────────────────────────────────
 
     console.log('[M2] Cadastro:', NSP_DATA.cadastro.length, 'atletas');
+    console.log('[M2] A3 Mapeamento recebido:', a3Mapeamento.length, 'linhas');
+    console.log('[M2] _a3NspIndex entradas:', Object.keys(_a3NspIndex).length);
 
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
-    // Usar A3 como base do select quando disponível (já carregado acima)
-    // value = atleta_id para joins diretos; fallback para nome se não mapeado
-    var sorted = NSP_DATA.cadastro.slice().sort(function(a, b) {
-      return a['Nome'].localeCompare(b['Nome'], 'pt');
-    });
-    sorted.forEach(function(r) {
-      var nomeNorm = a3NormalizeNome(r['Nome']);
-      var id = _a3NspIndex[nomeNorm] || null;
+
+    // Populate: base = A3 Mapeamento quando disponível (atleta_id garantido)
+    // Fallback: cadastro VOLT com atleta_id resolvido via _a3NspIndex
+    var baseSelect;
+    if (a3Mapeamento && a3Mapeamento.length > 0) {
+      baseSelect = a3Mapeamento
+        .filter(function(r){ return r.atleta_id && r.nome_nsp; })
+        .sort(function(a,b){ return (a.nome_nsp||'').localeCompare(b.nome_nsp||'','pt'); })
+        .map(function(r){
+          return { id: r.atleta_id, nome: r.nome_nsp, nomeCompleto: r.nome_completo||'' };
+        });
+    } else {
+      // Fallback VOLT: resolver atleta_id via índice já construído
+      baseSelect = NSP_DATA.cadastro.slice()
+        .sort(function(a,b){ return a['Nome'].localeCompare(b['Nome'],'pt'); })
+        .map(function(r){
+          var id = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
+          return { id: id, nome: r['Nome'], nomeCompleto: r['Nome Completo']||'' };
+        });
+    }
+
+    baseSelect.forEach(function(item) {
       var o = document.createElement('option');
-      o.value    = id || r['Nome'];           // atleta_id preferencial, nome como fallback
-      o.dataset.nome = r['Nome'];             // nome sempre acessível para VOLT
-      o.dataset.atletaId = id || '';
-      o.textContent = r['Nome'] + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
+      o.value             = item.id || item.nome;  // atleta_id real; nome só se sem ID
+      o.dataset.nome      = item.nome;             // sempre nome_nsp para joins VOLT
+      o.dataset.atletaId  = item.id || '';         // atleta_id explícito (pode ser '')
+      o.textContent = item.nome + (item.nomeCompleto ? ' \u2014 ' + item.nomeCompleto : '');
       sel.appendChild(o);
     });
+
+    // Log de verificação: quantos options têm atleta_id real
+    var comId = baseSelect.filter(function(i){ return !!i.id; }).length;
+    console.log('[M2] Options com atleta_id:', comId, '/', baseSelect.length);
 
     var params = new URLSearchParams(window.location.search);
     var atletaIdFromUrl = params.get('atleta_id') || null;
     var nomeFromUrl     = params.get('atleta') || params.get('nome') || null;
 
     if (atletaIdFromUrl) {
-      // Tentar selecionar pela option cujo value = atleta_id
+      // value das options agora É o atleta_id — seleção direta
       sel.value = atletaIdFromUrl;
-      // Se não encontrou (value era nome), tentar pelo dataset
-      if (!sel.value || sel.value !== atletaIdFromUrl) {
-        var opts = sel.querySelectorAll('option');
-        for (var i=0; i<opts.length; i++) {
-          if (opts[i].dataset.atletaId === atletaIdFromUrl) {
-            sel.value = opts[i].value; break;
-          }
+    } else if (nomeFromUrl) {
+      // fallback legado: procurar option cujo dataset.nome bate com o nome
+      var opts = sel.querySelectorAll('option');
+      for (var i=0; i<opts.length; i++) {
+        if (a3NormalizeNome(opts[i].dataset.nome||'') === a3NormalizeNome(nomeFromUrl)) {
+          sel.value = opts[i].value; break;
         }
       }
-    } else if (nomeFromUrl) {
-      sel.value = nomeFromUrl;
     }
     if (sel.value) { carregarAtleta(); }
 
@@ -981,36 +998,38 @@ function buildA3Panels(atletaId, posLabel, posCodigo, minutos, obsArr, plano) {
 }
 // ── Fim buildA3Panels ─────────────────────────────────────────────
 function carregarAtleta() {
-  var sel  = document.getElementById('athlete-select');
-  var val  = sel ? sel.value : '';
+  var sel    = document.getElementById('athlete-select');
   var selOpt = sel ? sel.options[sel.selectedIndex] : null;
-  // nome sempre vem do dataset (exibição + joins VOLT)
-  var nome    = (selOpt && selOpt.dataset.nome) ? selOpt.dataset.nome : val;
-  // atleta_id vem do dataset se disponível, senão o value é o atleta_id
+  // atleta_id: dataset.atletaId é a fonte primária (populado do A3)
   var atletaId = (selOpt && selOpt.dataset.atletaId) ? selOpt.dataset.atletaId : null;
-  // se o value parece um ID (não contém espaço, não é vazio), usar como atleta_id
-  if (!atletaId && val && !val.includes(' ') && val !== '') atletaId = val;
+  // nome: dataset.nome para todos os joins VOLT
+  var nome     = (selOpt && selOpt.dataset.nome) ? selOpt.dataset.nome : (sel ? sel.value : '');
 
-  if (!val || !NSP_DATA) {
+  if (!sel || !sel.value || !NSP_DATA) {
     document.getElementById('m2-content').innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="state-title">Selecione um atleta</div></div>';
     return;
   }
 
-  // Toque 4 — atualizar URL com atleta_id
-  if (atletaId && history.replaceState) {
+  // Atualizar URL: atleta_id real quando disponível, nunca nome como atleta_id
+  if (history.replaceState) {
     var url = new URL(window.location.href);
-    url.searchParams.set('atleta_id', atletaId);
-    if (nome) url.searchParams.set('nome', nome);
+    if (atletaId) {
+      url.searchParams.set('atleta_id', atletaId);
+    } else {
+      url.searchParams.delete('atleta_id');
+    }
+    url.searchParams.set('nome', nome);
     url.searchParams.delete('atleta');
     history.replaceState(null, '', url.toString());
   }
 
   try {
+    // Joins VOLT usam nome_nsp (dataset.nome)
     var cad = NSP_DATA.cadastro.find(function(r){return r['Nome']===nome;})||{};
     var map = NSP_DATA.mapeamento.find(function(r){return r['nome_nsp']===nome;})||{};
     var sc  = calcScore(nome, NSP_DATA.recuperacao, NSP_DATA.preTreino, NSP_DATA.carga);
 
-    // atleta_id: do select → fallback normalização
+    // atleta_id: do dataset (direto) → fallback normalização (último recurso)
     if (!atletaId) {
       atletaId = _a3NspIndex[a3NormalizeNome(nome)] || null;
     }
