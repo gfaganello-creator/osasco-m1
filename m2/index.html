@@ -405,8 +405,15 @@ function a3ParseCSV(txt) {
   var ls=txt.split('\n').filter(function(l){return l.trim();});
   if (ls.length<2) return [];
   function sp(line){var r=[],c='',q=false;for(var i=0;i<line.length;i++){var ch=line[i];if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c.replace(/^"|"$/g,'').trim());c='';}else{c+=ch;}}r.push(c.replace(/^"|"$/g,'').trim());return r;}
-  var hs=sp(ls[0]);
-  return ls.slice(1).map(function(l){var vs=sp(l),o={};hs.forEach(function(h,i){o[h]=(vs[i]||'').trim();});return o;});
+  // Normalizar headers: pegar apenas a primeira linha do valor (antes de \n ou \r)
+  // e remover caracteres não-ASCII (emojis, símbolos de proteção do Google Sheets)
+  function normHeader(h) {
+    return (h||'').split('\n')[0].split('\r')[0]
+      .replace(/[^\x00-\x7F]/g,'')  // remove não-ASCII (emojis, 🛑)
+      .trim();
+  }
+  var hs=sp(ls[0]).map(normHeader);
+  return ls.slice(1).map(function(l){var vs=sp(l),o={};hs.forEach(function(h,i){if(h) o[h]=(vs[i]||'').trim();});return o;});
 }
 function a3FiltrarTemporada(rows, campo) {
   var t=(window.APP_CONTEXT||{}).temporada; if(!t) return rows;
@@ -876,7 +883,10 @@ async function iniciarM2() {
     // DIAGNÓSTICO: mostrar colunas reais da primeira linha do Mapeamento
     if (a3Mapeamento.length > 0) {
       console.log('[M2/A3] Colunas Mapeamento:', Object.keys(a3Mapeamento[0]).join(' | '));
-      console.log('[M2/A3] Primeira linha:', JSON.stringify(a3Mapeamento[0]));
+      console.log('[M2/A3] atleta_id[0]:', a3Mapeamento[0].atleta_id, '| nome_nsp[0]:', a3Mapeamento[0].nome_nsp);
+      // Mostrar quantos têm atleta_id e nome_nsp preenchidos
+      var comAmbos = a3Mapeamento.filter(function(r){ return r.atleta_id && r.nome_nsp; }).length;
+      console.log('[M2/A3] Linhas com atleta_id+nome_nsp:', comAmbos, '/', a3Mapeamento.length);
     }
     _a3MinutosMap = a3MinutosPorAtleta(a3FiltrarTemporada(a3PosJogo));
     console.log('[M2/A3] Mapeamento:', a3Mapeamento.length,
