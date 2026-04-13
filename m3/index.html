@@ -757,26 +757,17 @@ async function iniciarM3(){
 
     var baseElenco;
     if (window._a3Ativos.length > 0) {
-      // DIAGNÓSTICO: logar primeiros 10 atletas para validar campos do Mapeamento
-      console.log('[M3/DIAG] Primeiros 10 atletas do Mapeamento:');
-      window._a3Ativos.slice(0, 10).forEach(function(a, i){
-        var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
-        console.log('[M3/DIAG] #'+(i+1),
-          '| atleta_id:', a.atleta_id || '—',
-          '| nome_volt:', a.nome_volt  || '(vazio)',
-          '| nome_nsp:',  a.nome_nsp   || '(vazio)',
-          '| nome_atleta:', a.nome_atleta || '(vazio)',
-          '| → lookup:', nomeRefVolt
-        );
-      });
+      var semVolt = [];  // T4: coletar misses em array, logar uma vez no final
 
       baseElenco = window._a3Ativos.map(function(a){
-        // Chave de join priorizada: nome_volt > nome_nsp > nome_atleta
+        // T3: chave de join priorizada — nome_volt > nome_nsp > nome_atleta
+        // Futuro: quando VOLT tiver atleta_id → _voltIndexById[a.atleta_id]
         var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
         var nomeNorm    = a3NormalizeNome(nomeRefVolt);
         var volt        = _voltIndex[nomeNorm] || null;
 
-        if (!volt) console.warn('[M3] Sem VOLT:', nomeRefVolt);
+        // T4: acumular misses silenciosamente
+        if (!volt) semVolt.push(nomeRefVolt + ' (' + (a.atleta_id||'sem_id') + ')');
 
         return {
           nome:         volt ? volt['Nome'] : nomeRefVolt,
@@ -786,6 +777,14 @@ async function iniciarM3(){
           _cargaSemana: a3CargaSemana(a.atleta_id)
         };
       });
+
+      // T4: log único consolidado — sem spam por atleta
+      if (semVolt.length) {
+        console.warn('[M3] Atletas sem VOLT (' + semVolt.length + '/' + window._a3Ativos.length + '):', semVolt.join(', '));
+      } else {
+        console.log('[M3] Join A3 \u2194 VOLT: 100% \u2014 todos os atletas encontrados.');
+      }
+
     } else {
       // Fallback VOLT
       console.warn('[M3] A3 Mapeamento vazio — usando cadastro VOLT como fallback');
