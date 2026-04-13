@@ -1212,12 +1212,11 @@ function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
 
   dadosAtletas = cadastro.map(r => {
     var atletaData = calcularScore(r['Nome'], nspData, desempRows, mapeamento);
-    // ── Arquivo 3 v6: enriquecer com atleta_id e minutos da temporada ──
+    // ── A3 é camada de enriquecimento opcional — VOLT é a base ──
     var nomeNormalizado = a3NormalizeNome(r['Nome']);
-    var atletaId = _a3NspIndex[nomeNormalizado] || null;
-    if (!atletaId) { console.warn('[A3] NÃO MAPEADO:', r['Nome']); }
+    var atletaId = _a3NspIndex ? (_a3NspIndex[nomeNormalizado] || null) : null;
     atletaData.atleta_id     = atletaId;
-    atletaData.minutosTotais = atletaId ? (_a3MinutosMap[atletaId] || 0) : null;
+    atletaData.minutosTotais = atletaId ? (_a3MinutosMap ? (_a3MinutosMap[atletaId] || 0) : 0) : 0;
     return atletaData;
   }).sort((a, b) => b.score - a.score);
 
@@ -1417,7 +1416,7 @@ function renderTabela() {
       <td><span class="${ratioClass}">${ratioDisplay}</span></td>
       <td><span class="mono-val">${a.min7d}'</span></td>
       <td><span class="mono-val">${a.min21d}'</span></td>
-      <td style="text-align:center;min-width:90px;white-space:nowrap"><span class="mono-val" title="Minutos na temporada 2026 (Arquivo 3 v6)">${(function(){ var minutosDisplay = '—'; if(a.atleta_id){ var m = a.minutosTotais || 0; minutosDisplay = m + 'min'; } else { minutosDisplay = '<span style="color:#f59e0b;font-weight:600">⚠</span>'; } return minutosDisplay; })()}</span></td>
+      <td style="text-align:center;min-width:90px;white-space:nowrap"><span class="mono-val" title="Minutos na temporada">${a.atleta_id ? (a.minutosTotais || 0) + 'min' : '<span style="color:var(--ink4);font-size:11px">—</span>'}</span></td>
       <td>${dorHtml}</td>
       <td><div class="alerts-cell">${alertsHtml}</div></td>
       <td><span class="${decClass}">${a.decisao}</span></td>
@@ -1521,7 +1520,7 @@ renderTabela = function() {
     const ratioClass = a.ratio <= 1.10 ? 'ratio-ok' : a.ratio <= 1.45 ? 'ratio-warn' : 'ratio-risk';
     const dorHtml    = a.pdor === 0 ? '<span class="dor-zero">\u2014</span>' : a.pdor <= 2 ? '<span class="dor-leve">' + a.pdor + '</span>' : '<span class="dor-alt">' + a.pdor + '</span>';
     const alertsHtml = a.alertas.length ? a.alertas.map(al => '<span class="alert-tag alert-' + al.t + '">' + al.m + '</span>').join('') : '<span style="color:var(--ink4);font-size:11px">\u2014</span>';
-    const minTempHtml = a.atleta_id ? (a.minutosTotais || 0) + 'min' : '<span style="color:#f59e0b;font-weight:600">\u26a0</span>';
+    const minTempHtml = a.atleta_id ? (a.minutosTotais || 0) + 'min' : '<span style="color:var(--ink4);font-size:11px">—</span>';
     const dispHtml   = a._disponibilidade ? '<span class="disp-badge ' + (a._disponibilidade.cls||'disp-ok') + '">' + (a._disponibilidade.status||'Dispon\u00edvel') + '</span>' : '<span class="disp-badge disp-ok">Dispon\u00edvel</span>';
     return '<tr class="' + rowClass + ' row-link" onclick="abrirFicha(' + JSON.stringify(a.nome) + ')" title="Ver ficha de ' + a.nome + '">' +
       '<td><span class="pos-badge">' + a.posicao + '</span></td>' +
@@ -1547,9 +1546,9 @@ renderTabela = function() {
 
 // ── NAVEGAÇÃO PARA M2 ─────────────────────────────────────────────────
 function abrirFicha(nome) {
-  // Preferência: passar atleta_id (v6). Fallback: nome (legado)
+  // A3 opcional: usa atleta_id se disponível, senão passa só o nome
   var atletaObj = dadosAtletas.find(function(a){ return a.nome === nome; });
-  var atletaId  = atletaObj ? atletaObj.atleta_id : null;
+  var atletaId  = atletaObj ? (atletaObj.atleta_id || null) : null;
   var params    = atletaId
     ? '?atleta_id=' + encodeURIComponent(atletaId) + '&nome=' + encodeURIComponent(nome)
     : '?atleta=' + encodeURIComponent(nome);
