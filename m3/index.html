@@ -748,36 +748,106 @@ async function iniciarM3(){
     // ── PATCH 3: base do elenco = Mapeamento A3 ───────────────────
     // Fallback: se A3 falhar ou estiver vazio, usa cadastro VOLT
 
-    // Índice VOLT com múltiplas chaves por atleta:
-    // "andrey" → r  (nome curto = chave primária do VOLT)
-    // "andrey ventura" → r  (nome completo, se existir)
+    // Índice VOLT por Nome e Nome Completo normalizados
     var _voltIndex = {};
+    var _voltTokenCount = {};
+    var _voltLista = [];  // lista plana para fuzzy match no passo (d)
     cadastro.forEach(function(r){
       var nCurto    = a3NormalizeNome(r['Nome']          || '');
       var nCompleto = a3NormalizeNome(r['Nome Completo'] || '');
       if (nCurto)    _voltIndex[nCurto]    = r;
       if (nCompleto) _voltIndex[nCompleto] = r;
+      var tok = nCurto.split(' ')[0];
+      if (tok) _voltTokenCount[tok] = (_voltTokenCount[tok] || 0) + 1;
+      _voltLista.push({ r: r, tokens: nCurto.split(' ') });
     });
+
+    // Levenshtein para passo (d) — detecta Bryan/Brayan, Bryam/Brayan
+    function levenshtein(a, b) {
+      if (a === b) return 0;
+      if (!a) return b.length;
+      if (!b) return a.length;
+      var m = a.length, n = b.length, i, j;
+      var dp = [];
+      for (i = 0; i <= m; i++) { dp[i] = [i]; }
+      for (j = 0; j <= n; j++) { dp[0][j] = j; }
+      for (i = 1; i <= m; i++) {
+        for (j = 1; j <= n; j++) {
+          dp[i][j] = a[i-1] === b[j-1]
+            ? dp[i-1][j-1]
+            : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        }
+      }
+      return dp[m][n];
+    }
+
+    // Fuzzy: cada token do A3 (≥4 chars) vs cada token do VOLT (≥4 chars)
+    // Casa se dist ≤ 2 e único candidato — VOLT é sempre a fonte do nome
+    function fuzzyVolt(tokensA3) {
+      var melhor = null, melhorDist = 99, ambiguo = false;
+      _voltLista.forEach(function(v) {
+        v.tokens.forEach(function(tv) {
+          if (tv.length < 4) return;
+          tokensA3.forEach(function(ta) {
+            if (ta.length < 4) return;
+            var d = levenshtein(ta, tv);
+            if (d <= 2) {
+              if (d < melhorDist) {
+                melhorDist = d; melhor = v.r; ambiguo = false;
+              } else if (d === melhorDist && melhor && melhor['Nome'] !== v.r['Nome']) {
+                ambiguo = true;
+              }
+            }
+          });
+        });
+      });
+      return ambiguo ? null : melhor;
+    }
 
     var baseElenco;
     if (window._a3Ativos.length > 0) {
-      var semVolt = [];
+      var semVolt    = [];
+      var ambiguos   = [];
+      var grafiasDif = [];
 
       baseElenco = window._a3Ativos.map(function(a){
-        // Tentar em ordem: nome_nsp completo → primeiro token do nome_nsp
-        // (ex: "Andrey Ventura" → tenta "andrey ventura", depois "andrey")
         var ref      = a.nome_nsp || a.nome_atleta || '';
         var refNorm  = a3NormalizeNome(ref);
-        var primeiro = refNorm.split(' ')[0];
+        var tokens   = refNorm.split(' ');
+        var primeiro = tokens[0];
 
-        var volt = _voltIndex[refNorm]   // "andrey ventura" → match se VOLT tem Nome Completo
-                || _voltIndex[primeiro]  // "andrey" → match pelo nome curto do VOLT
-                || null;
+        // (a+b): nome_nsp vs Nome e Nome Completo
+        var volt = _voltIndex[refNorm] || null;
 
-        if (!volt) semVolt.push(ref + ' (' + (a.atleta_id||'?') + ')');
+        // (c): primeiro token único
+        if (!volt && primeiro) {
+          var countC = _voltTokenCount[primeiro] || 0;
+          if (countC === 1) {
+            volt = _voltIndex[primeiro] || null;
+          } else if (countC > 1) {
+            ambiguos.push(ref + ' (' + (a.atleta_id||'?') + ') — "' + primeiro + '" ambíguo (' + countC + 'x)');
+          }
+        }
+
+        // (d): fuzzy Levenshtein — Bryan→Brayan, Bryam→Brayan automático
+        if (!volt) {
+          var jaAmb = ambiguos.some(function(s){ return s.indexOf(ref + ' (') === 0; });
+          if (!jaAmb) {
+            var fuzzy = fuzzyVolt(tokens);
+            if (fuzzy) {
+              volt = fuzzy;
+              // Loga apenas se grafia era diferente (dist > 0)
+              if (a3NormalizeNome(fuzzy['Nome']) !== refNorm) {
+                grafiasDif.push('"' + ref + '" → "' + fuzzy['Nome'] + '" (' + (a.atleta_id||'?') + ')');
+              }
+            } else {
+              semVolt.push(ref + ' (' + (a.atleta_id||'?') + ')');
+            }
+          }
+        }
 
         return {
-          nome:         volt ? volt['Nome'] : ref,
+          nome:         volt ? volt['Nome'] : ref,  // VOLT é a fonte oficial
           atleta_id:    a.atleta_id,
           posicao:      a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
           volt:         volt || null,
@@ -785,11 +855,15 @@ async function iniciarM3(){
         };
       });
 
-      if (semVolt.length) {
-        console.warn('[M3] Sem VOLT (' + semVolt.length + '/' + window._a3Ativos.length + '):', semVolt.join(', '));
-      } else {
-        console.log('[M3] Join A3 \u2194 VOLT: 100%');
-      }
+      var total = window._a3Ativos.length;
+      var nOk   = total - semVolt.length - ambiguos.length;
+      console.log('[M3] Join A3\u2194VOLT: ' + nOk + '/' + total
+        + (grafiasDif.length ? ' | grafia corrigida: ' + grafiasDif.length : '')
+        + (ambiguos.length   ? ' | amb\u00edguo: '     + ambiguos.length   : '')
+        + (semVolt.length    ? ' | sem match: '        + semVolt.length    : ''));
+      if (grafiasDif.length) console.info('[M3] Grafia corrigida (A3\u2192VOLT):', grafiasDif.join(' | '));
+      if (ambiguos.length)   console.warn('[M3] Amb\u00edguos:', ambiguos.join(' | '));
+      if (semVolt.length)    console.warn('[M3] Sem VOLT:', semVolt.join(' | '));
 
     } else {
       // Fallback VOLT
