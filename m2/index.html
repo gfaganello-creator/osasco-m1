@@ -875,24 +875,24 @@ async function iniciarM2() {
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
 
-    // Populate SEMPRE usa cadastro VOLT como base — garante lista completa
-    // atleta_id é enriquecido via _a3NspIndex (já construído acima)
     var sorted = NSP_DATA.cadastro.slice()
       .sort(function(a,b){ return a['Nome'].localeCompare(b['Nome'],'pt'); });
 
     sorted.forEach(function(r) {
-      var nomeVolt  = r['Nome'] || '';
-      var atletaId  = _a3NspIndex[a3NormalizeNome(nomeVolt)] || null;
+      var id = null;
+      if (_a3NspIndex) {
+        id = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
+      }
       var o = document.createElement('option');
-      o.value            = atletaId || nomeVolt;  // atleta_id real; nome só se sem ID
-      o.dataset.nome     = nomeVolt;              // nome_nsp para joins VOLT
-      o.dataset.atletaId = atletaId || '';        // atleta_id explícito
-      o.textContent = nomeVolt + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
+      o.value            = id || '';          // atleta_id real; vazio se não mapeado
+      o.dataset.atletaId = id || '';          // atleta_id explícito
+      o.dataset.nome     = r['Nome'];         // nome sempre disponível para VOLT
+      o.textContent = r['Nome'] + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
       sel.appendChild(o);
     });
 
     var comId = sorted.filter(function(r){
-      return !!_a3NspIndex[a3NormalizeNome(r['Nome']||'')];
+      return !!(_a3NspIndex && _a3NspIndex[a3NormalizeNome(r['Nome']||'')]);
     }).length;
     console.log('[M2] Options com atleta_id:', comId, '/', sorted.length);
 
@@ -900,29 +900,28 @@ async function iniciarM2() {
     var atletaIdFromUrl = params.get('atleta_id') || null;
     var nomeFromUrl     = params.get('atleta') || params.get('nome') || null;
 
-    if (atletaIdFromUrl) {
-      // Tentar selecionar diretamente pelo value (= atleta_id)
-      sel.value = atletaIdFromUrl;
-      // Se não encontrou (URL vinha com nome antigo), procurar por dataset.atletaId
-      if (!sel.value || sel.value !== atletaIdFromUrl) {
-        var opts = sel.querySelectorAll('option');
-        for (var i=0; i<opts.length; i++) {
-          if (opts[i].dataset.atletaId === atletaIdFromUrl ||
-              a3NormalizeNome(opts[i].dataset.nome||'') === a3NormalizeNome(atletaIdFromUrl)) {
-            sel.value = opts[i].value; break;
-          }
+    // Função auxiliar: selecionar option por atleta_id ou nome
+    function selecionarOption(id, nome) {
+      var opts = sel.querySelectorAll('option');
+      for (var i=0; i<opts.length; i++) {
+        if (id && opts[i].dataset.atletaId === id) { sel.value = opts[i].value; return true; }
+      }
+      for (var j=0; j<opts.length; j++) {
+        if (nome && a3NormalizeNome(opts[j].dataset.nome||'') === a3NormalizeNome(nome)) {
+          sel.value = opts[j].value; return true;
         }
       }
-    } else if (nomeFromUrl) {
-      // Fallback legado: procurar por dataset.nome normalizado
-      var opts2 = sel.querySelectorAll('option');
-      for (var j=0; j<opts2.length; j++) {
-        if (a3NormalizeNome(opts2[j].dataset.nome||'') === a3NormalizeNome(nomeFromUrl)) {
-          sel.value = opts2[j].value; break;
-        }
-      }
+      return false;
     }
-    if (sel.value) { carregarAtleta(); }
+
+    if (atletaIdFromUrl || nomeFromUrl) {
+      selecionarOption(atletaIdFromUrl, nomeFromUrl);
+    }
+    if (sel.value !== undefined && document.querySelector('option[value="'+sel.value+'"]')) {
+      carregarAtleta();
+    } else if (sel.selectedIndex > 0) {
+      carregarAtleta();
+    }
 
   } catch(err) {
     console.error('[M2] Erro ao carregar:', err.message);
@@ -997,13 +996,15 @@ function buildA3Panels(atletaId, posLabel, posCodigo, minutos, obsArr, plano) {
 // ── Fim buildA3Panels ─────────────────────────────────────────────
 function carregarAtleta() {
   var sel    = document.getElementById('athlete-select');
-  var selOpt = sel ? sel.options[sel.selectedIndex] : null;
-  // atleta_id: dataset.atletaId é a fonte primária (populado do A3)
-  var atletaId = (selOpt && selOpt.dataset.atletaId) ? selOpt.dataset.atletaId : null;
-  // nome: dataset.nome para todos os joins VOLT
-  var nome     = (selOpt && selOpt.dataset.nome) ? selOpt.dataset.nome : (sel ? sel.value : '');
+  var idx    = sel ? sel.selectedIndex : -1;
+  var selOpt = (idx > 0 && sel) ? sel.options[idx] : null;
 
-  if (!sel || !sel.value || !NSP_DATA) {
+  // nome: sempre de dataset.nome (join VOLT)
+  var nome     = selOpt ? (selOpt.dataset.nome || selOpt.textContent.split(' \u2014 ')[0].trim()) : '';
+  // atleta_id: dataset.atletaId (join A3)
+  var atletaId = selOpt ? (selOpt.dataset.atletaId || null) : null;
+
+  if (!selOpt || !nome || !NSP_DATA) {
     document.getElementById('m2-content').innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="state-title">Selecione um atleta</div></div>';
     return;
   }
