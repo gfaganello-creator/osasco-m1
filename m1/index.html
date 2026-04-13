@@ -502,13 +502,17 @@ function a3ParseCSV(txt) {
     r.push(c.replace(/^"|"$/g,'').trim());
     return r;
   }
-  var hs = splitLine(ls[0]);
+  function normHeader(h) {
+    var clean = (h||'').replace(/[^\x00-\x7F]/g,'').trim();
+    var match = clean.match(/^([a-z][a-z0-9_]*)/i);
+    return match ? match[1].toLowerCase() : '';
+  }
+  var hs = splitLine(ls[0]).map(normHeader);
   return ls.slice(1).map(function(l){
     var vs=splitLine(l), o={};
-    hs.forEach(function(h,i){ o[h]=(vs[i]||'').trim(); });
+    hs.forEach(function(h,i){ if(h) o[h]=(vs[i]||'').trim(); });
     return o;
-  });
-}
+  });}
 
 // Filtra atletas com status_ativo === 'Ativo' (case-insensitive)
 function a3FiltrarAtivos(mapeamento) {
