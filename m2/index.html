@@ -875,52 +875,50 @@ async function iniciarM2() {
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
 
-    // Populate: base = A3 Mapeamento quando disponível (atleta_id garantido)
-    // Fallback: cadastro VOLT com atleta_id resolvido via _a3NspIndex
-    var baseSelect;
-    if (a3Mapeamento && a3Mapeamento.length > 0) {
-      baseSelect = a3Mapeamento
-        .filter(function(r){ return r.atleta_id && r.nome_nsp; })
-        .sort(function(a,b){ return (a.nome_nsp||'').localeCompare(b.nome_nsp||'','pt'); })
-        .map(function(r){
-          return { id: r.atleta_id, nome: r.nome_nsp, nomeCompleto: r.nome_completo||'' };
-        });
-    } else {
-      // Fallback VOLT: resolver atleta_id via índice já construído
-      baseSelect = NSP_DATA.cadastro.slice()
-        .sort(function(a,b){ return a['Nome'].localeCompare(b['Nome'],'pt'); })
-        .map(function(r){
-          var id = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
-          return { id: id, nome: r['Nome'], nomeCompleto: r['Nome Completo']||'' };
-        });
-    }
+    // Populate SEMPRE usa cadastro VOLT como base — garante lista completa
+    // atleta_id é enriquecido via _a3NspIndex (já construído acima)
+    var sorted = NSP_DATA.cadastro.slice()
+      .sort(function(a,b){ return a['Nome'].localeCompare(b['Nome'],'pt'); });
 
-    baseSelect.forEach(function(item) {
+    sorted.forEach(function(r) {
+      var nomeVolt  = r['Nome'] || '';
+      var atletaId  = _a3NspIndex[a3NormalizeNome(nomeVolt)] || null;
       var o = document.createElement('option');
-      o.value             = item.id || item.nome;  // atleta_id real; nome só se sem ID
-      o.dataset.nome      = item.nome;             // sempre nome_nsp para joins VOLT
-      o.dataset.atletaId  = item.id || '';         // atleta_id explícito (pode ser '')
-      o.textContent = item.nome + (item.nomeCompleto ? ' \u2014 ' + item.nomeCompleto : '');
+      o.value            = atletaId || nomeVolt;  // atleta_id real; nome só se sem ID
+      o.dataset.nome     = nomeVolt;              // nome_nsp para joins VOLT
+      o.dataset.atletaId = atletaId || '';        // atleta_id explícito
+      o.textContent = nomeVolt + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
       sel.appendChild(o);
     });
 
-    // Log de verificação: quantos options têm atleta_id real
-    var comId = baseSelect.filter(function(i){ return !!i.id; }).length;
-    console.log('[M2] Options com atleta_id:', comId, '/', baseSelect.length);
+    var comId = sorted.filter(function(r){
+      return !!_a3NspIndex[a3NormalizeNome(r['Nome']||'')];
+    }).length;
+    console.log('[M2] Options com atleta_id:', comId, '/', sorted.length);
 
     var params = new URLSearchParams(window.location.search);
     var atletaIdFromUrl = params.get('atleta_id') || null;
     var nomeFromUrl     = params.get('atleta') || params.get('nome') || null;
 
     if (atletaIdFromUrl) {
-      // value das options agora É o atleta_id — seleção direta
+      // Tentar selecionar diretamente pelo value (= atleta_id)
       sel.value = atletaIdFromUrl;
+      // Se não encontrou (URL vinha com nome antigo), procurar por dataset.atletaId
+      if (!sel.value || sel.value !== atletaIdFromUrl) {
+        var opts = sel.querySelectorAll('option');
+        for (var i=0; i<opts.length; i++) {
+          if (opts[i].dataset.atletaId === atletaIdFromUrl ||
+              a3NormalizeNome(opts[i].dataset.nome||'') === a3NormalizeNome(atletaIdFromUrl)) {
+            sel.value = opts[i].value; break;
+          }
+        }
+      }
     } else if (nomeFromUrl) {
-      // fallback legado: procurar option cujo dataset.nome bate com o nome
-      var opts = sel.querySelectorAll('option');
-      for (var i=0; i<opts.length; i++) {
-        if (a3NormalizeNome(opts[i].dataset.nome||'') === a3NormalizeNome(nomeFromUrl)) {
-          sel.value = opts[i].value; break;
+      // Fallback legado: procurar por dataset.nome normalizado
+      var opts2 = sel.querySelectorAll('option');
+      for (var j=0; j<opts2.length; j++) {
+        if (a3NormalizeNome(opts2[j].dataset.nome||'') === a3NormalizeNome(nomeFromUrl)) {
+          sel.value = opts2[j].value; break;
         }
       }
     }
