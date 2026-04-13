@@ -751,13 +751,17 @@ async function iniciarM3(){
     if (window._a3Ativos.length > 0) {
       baseElenco = window._a3Ativos.map(function(a){
         var nome = a.nome_nsp || a.nome_atleta || '';
+        var nomeNorm = a3NormalizeNome(nome);
+        var primeiroToken = nomeNorm.split(' ')[0];
+        // Join VOLT: tenta nome completo → primeiro token (nomes curtos no VOLT)
         var volt = cadastro.find(function(v){
-          return a3NormalizeNome(v['Nome']) === a3NormalizeNome(nome);
+          var vNorm = a3NormalizeNome(v['Nome']);
+          return vNorm === nomeNorm || vNorm === primeiroToken;
         });
         // PATCH 6: log se sem VOLT
         if (!volt) console.warn('[M3] Sem VOLT:', nome);
         return {
-          nome:      nome,
+          nome:      volt ? volt['Nome'] : nome,  // usar nome do VOLT quando disponível
           atleta_id: a.atleta_id,
           // PATCH 5: posição oficial do Mapeamento
           posicao:   a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
