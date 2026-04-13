@@ -782,16 +782,17 @@ async function iniciarM3(){
     }
 
     // Fuzzy: cada token do A3 (≥4 chars) vs cada token do VOLT (≥4 chars)
-    // Casa se dist ≤ 2 e único candidato — VOLT é sempre a fonte do nome
+    // Casa se dist == 1 e comprimento mínimo 5 — Bryan/Brayan sim
+    // dist > 0 obrigatório: tokens idênticos já foram cobertos nos passos a/b/c
     function fuzzyVolt(tokensA3) {
       var melhor = null, melhorDist = 99, ambiguo = false;
       _voltLista.forEach(function(v) {
         v.tokens.forEach(function(tv) {
-          if (tv.length < 4) return;
+          if (tv.length < 5) return;
           tokensA3.forEach(function(ta) {
-            if (ta.length < 4) return;
+            if (ta.length < 5) return;
             var d = levenshtein(ta, tv);
-            if (d <= 2) {
+            if (d === 1) {  // exatamente 1 — grafia levemente errada
               if (d < melhorDist) {
                 melhorDist = d; melhor = v.r; ambiguo = false;
               } else if (d === melhorDist && melhor && melhor['Nome'] !== v.r['Nome']) {
@@ -816,11 +817,12 @@ async function iniciarM3(){
         var tokens   = refNorm.split(' ');
         var primeiro = tokens[0];
 
-        // (a+b): nome_nsp vs Nome e Nome Completo
+        // (a+b): nome_nsp vs Nome e Nome Completo — match exato
         var volt = _voltIndex[refNorm] || null;
 
-        // (c): primeiro token único
-        if (!volt && primeiro) {
+        // (c): primeiro token único — só casa se o nome_nsp tem UM único token
+        // (ex: "Andrey" → único no VOLT → casa; "Pedro Henrique" → 2 tokens → não entra aqui)
+        if (!volt && tokens.length === 1 && primeiro) {
           var countC = _voltTokenCount[primeiro] || 0;
           if (countC === 1) {
             volt = _voltIndex[primeiro] || null;
@@ -829,16 +831,36 @@ async function iniciarM3(){
           }
         }
 
-        // (d): fuzzy Levenshtein — Bryan→Brayan, Bryam→Brayan automático
+        // (c2): nome_nsp com múltiplos tokens — tenta primeiro token só se
+        // o segundo token também bate com algum token do candidato VOLT
+        if (!volt && tokens.length > 1) {
+          var countC2 = _voltTokenCount[primeiro] || 0;
+          if (countC2 === 1) {
+            var candidato = _voltIndex[primeiro];
+            if (candidato) {
+              // Verificar se pelo menos um outro token do A3 bate com algum token do VOLT
+              var nCandidato = a3NormalizeNome(candidato['Nome']);
+              var toksCandidato = nCandidato.split(' ');
+              var outroTokenBate = tokens.slice(1).some(function(t2) {
+                return toksCandidato.some(function(tc) { return tc === t2; });
+              });
+              if (outroTokenBate) volt = candidato;
+              // se não bate, não casa — Pedro Favorito ≠ Pedro Henrique
+            }
+          } else if (countC2 > 1) {
+            ambiguos.push(ref + ' (' + (a.atleta_id||'?') + ') — "' + primeiro + '" ambíguo (' + countC2 + 'x)');
+          }
+        }
+
+        // (d): fuzzy Levenshtein dist≤1 len≥5 — Bryan→Brayan automático
         if (!volt) {
           var jaAmb = ambiguos.some(function(s){ return s.indexOf(ref + ' (') === 0; });
           if (!jaAmb) {
             var fuzzy = fuzzyVolt(tokens);
             if (fuzzy) {
               volt = fuzzy;
-              // Loga apenas se grafia era diferente (dist > 0)
               if (a3NormalizeNome(fuzzy['Nome']) !== refNorm) {
-                grafiasDif.push('"' + ref + '" → "' + fuzzy['Nome'] + '" (' + (a.atleta_id||'?') + ')');
+                grafiasDif.push('"' + ref + '" \u2192 "' + fuzzy['Nome'] + '" (' + (a.atleta_id||'?') + ')');
               }
             } else {
               semVolt.push(ref + ' (' + (a.atleta_id||'?') + ')');
