@@ -978,40 +978,46 @@ function importarEscalacaoM5() {
       utilizacao[a.nome] = { jogou:false, titular:false, minutos:0, entrou:false, saiu:false, obs:'' };
     });
 
-    // Pré-preencher utilização a partir de Pos_Jogo (se já existe registro da partida)
+    // Pré-preencher utilização a partir de Pos_Jogo
     var posJogoPartida = a3PosJogo.filter(function(r){
-      return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+      var pid = a3Campo_M6(r,['partida_id','jogo_id','game_id']);
+      return !partida_id || pid===partida_id;
     });
+    console.log('[M6] Pos_Jogo p/ partida', partida_id, ':', posJogoPartida.length, 'rows');
     posJogoPartida.forEach(function(r){
-      var aid = (r['atleta_id']||'').trim();
-      var nomev = idParaNome[aid];
-      if(!nomev) nomev = (r['nome_atleta']||'').trim();
+      var aid   = a3Campo_M6(r,['atleta_id','id_atleta','athlete_id']);
+      var nomev = idParaNome[aid] || a3Campo_M6(r,['nome_atleta','nome','name']);
       if(!nomev) return;
-      // Encontrar no elenco (VOLT)
       var found = elenco.find(function(a){ return normalizarNome(a.nome)===normalizarNome(nomev); });
       if(!found) return;
       var u = utilizacao[found.nome];
-      u.jogou    = (r['jogou']||'').trim().toUpperCase()==='S';
-      u.titular  = (r['titular']||'').trim().toUpperCase()==='S';
-      u.minutos  = parseInt(r['minutos']||0)||0;
-      u.obs      = r['observacoes']||r['obs']||'';
+      u.jogou   = a3Campo_M6(r,['jogou','played','jogou_sn']).toUpperCase()==='S';
+      u.titular = a3Campo_M6(r,['titular','started','titular_sn']).toUpperCase()==='S';
+      u.minutos = parseInt(a3Campo_M6(r,['minutos','minutes','min_jogados'])||0)||0;
+      u.obs     = a3Campo_M6(r,['observacao_pos_jogo','observacoes','obs','note']);
     });
 
-    // Pré-preencher a partir de Relacionados (fallback)
+    // Fallback: Relacionados (se Pos_Jogo vazio)
     if(!posJogoPartida.length){
       var relPartida = a3Relac.filter(function(r){
-        return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+        var pid = a3Campo_M6(r,['partida_id','jogo_id','game_id']);
+        return !partida_id || pid===partida_id;
       });
+      console.log('[M6] Fallback Relacionados p/ partida', partida_id, ':', relPartida.length, 'rows');
       relPartida.forEach(function(r){
-        var aid = (r['atleta_id']||'').trim();
-        var nomev = idParaNome[aid]||(r['nome_atleta']||'').trim();
+        var aid   = a3Campo_M6(r,['atleta_id','id_atleta','athlete_id']);
+        var nomev = idParaNome[aid] || a3Campo_M6(r,['nome_atleta','nome','name']);
         if(!nomev) return;
         var found = elenco.find(function(a){ return normalizarNome(a.nome)===normalizarNome(nomev); });
         if(!found) return;
+        var status = a3Campo_M6(r,['status','situacao']).toLowerCase();
+        var rel    = a3Campo_M6(r,['relacionado','relacionado_sn','in_list']);
         var u = utilizacao[found.nome];
-        u.jogou   = (r['jogou']||'').trim().toUpperCase()==='S' || true; // relacionado = jogou
-        u.titular = (r['titular']||'').trim().toUpperCase()==='S';
-        u.minutos = parseInt(r['minutos']||0)||0;
+        if(rel==='S' || status==='titular' || status==='banco'){
+          u.jogou   = true;
+          u.titular = (status==='titular');
+          u.minutos = parseInt(a3Campo_M6(r,['minutos','minutes'])||0)||0;
+        }
       });
     }
 
