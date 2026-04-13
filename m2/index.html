@@ -1069,7 +1069,7 @@ function carregarAtleta() {
     if (!atletaId) {
       atletaId = _a3NspIndex[a3NormalizeNome(nome)] || null;
     }
-    if (!atletaId) console.warn('[M2] NÃO MAPEADO:', nome);
+
 
     // ── PATCH 5: posição oficial do Mapeamento A3 ─────────────────
     var a3Data = atletaId ? (_a3PorId[atletaId]||null) : null;
