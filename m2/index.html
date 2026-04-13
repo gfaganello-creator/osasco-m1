@@ -415,7 +415,18 @@ function a3FiltrarTemporada(rows, campo) {
 }
 function a3BuildNspIndex(mapeamento) {
   var idx={};
-  (mapeamento||[]).forEach(function(r){if(r.nome_nsp&&r.atleta_id) idx[a3NormalizeNome(r.nome_nsp)]=r.atleta_id;});
+  (mapeamento||[]).forEach(function(r){
+    if (!r.atleta_id) return;
+    // chave 1: nome_nsp completo normalizado  ("andrey ventura" → OS001)
+    if (r.nome_nsp) idx[a3NormalizeNome(r.nome_nsp)] = r.atleta_id;
+    // chave 2: nome_atleta completo normalizado
+    if (r.nome_atleta) idx[a3NormalizeNome(r.nome_atleta)] = r.atleta_id;
+    // chave 3: primeiro token do nome_nsp ("andrey" → OS001) — fallback para nomes curtos do VOLT
+    if (r.nome_nsp) {
+      var primeiro = a3NormalizeNome(r.nome_nsp).split(' ')[0];
+      if (primeiro && !idx[primeiro]) idx[primeiro] = r.atleta_id;
+    }
+  });
   return idx;
 }
 function a3MinutosPorAtleta(posJogoRows) {
