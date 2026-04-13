@@ -745,13 +745,14 @@ async function iniciarM3(){
     });
     console.log('[M3/A3] Treinos_Semana filtrados:', treinosFiltrados.length);
 
-    // ── PATCH 3: base do elenco = Mapeamento A3 ───────────────────
-    // Fallback: se A3 falhar ou estiver vazio, usa cadastro VOLT
+    // ── BASE DO ELENCO = VOLT (fonte oficial) ─────────────────────
+    // A3 enriquece com atleta_id, posição oficial e carga semanal
+    // Índice A3 por nome_nsp normalizado → para enriquecer atletas do VOLT
 
-    // Índice VOLT por Nome e Nome Completo normalizados
+    // Índice VOLT por Nome e Nome Completo normalizados (para fuzzy interno)
     var _voltIndex = {};
     var _voltTokenCount = {};
-    var _voltLista = [];  // lista plana para fuzzy match no passo (d)
+    var _voltLista = [];
     cadastro.forEach(function(r){
       var nCurto    = a3NormalizeNome(r['Nome']          || '');
       var nCompleto = a3NormalizeNome(r['Nome Completo'] || '');
@@ -762,7 +763,7 @@ async function iniciarM3(){
       _voltLista.push({ r: r, tokens: nCurto.split(' ') });
     });
 
-    // Levenshtein para passo (d) — detecta Bryan/Brayan, Bryam/Brayan
+    // Levenshtein para match fuzzy A3→VOLT (Bryan/Brayan)
     function levenshtein(a, b) {
       if (a === b) return 0;
       if (!a) return b.length;
@@ -781,23 +782,39 @@ async function iniciarM3(){
       return dp[m][n];
     }
 
-    // Fuzzy: cada token do A3 (≥4 chars) vs cada token do VOLT (≥4 chars)
-    // Casa se dist == 1 e comprimento mínimo 5 — Bryan/Brayan sim
-    // dist > 0 obrigatório: tokens idênticos já foram cobertos nos passos a/b/c
-    function fuzzyVolt(tokensA3) {
+    // Índice A3 por múltiplas chaves → encontrar atleta_id para cada atleta do VOLT
+    // Chaves: nome_volt, nome_nsp, nome_atleta (e tokens)
+    var _a3IndexPorNome = {};
+    (window._a3Ativos || []).forEach(function(a){
+      var chaves = [
+        a3NormalizeNome(a.nome_volt   || ''),
+        a3NormalizeNome(a.nome_nsp    || ''),
+        a3NormalizeNome(a.nome_atleta || ''),
+      ];
+      chaves.forEach(function(ch){
+        if (ch && !_a3IndexPorNome[ch]) _a3IndexPorNome[ch] = a;
+      });
+    });
+
+    // Buscar registro A3 para um atleta do VOLT (nome curto + fuzzy)
+    function buscarA3(nomeVolt, nomeCompletoVolt) {
+      var n1 = a3NormalizeNome(nomeVolt || '');
+      var n2 = a3NormalizeNome(nomeCompletoVolt || '');
+      // Direto por nome curto ou completo
+      if (_a3IndexPorNome[n1]) return _a3IndexPorNome[n1];
+      if (_a3IndexPorNome[n2]) return _a3IndexPorNome[n2];
+      // Fuzzy dist==1 em tokens longos (Brayan/Bryan)
+      var toks = n1.split(' ');
       var melhor = null, melhorDist = 99, ambiguo = false;
-      _voltLista.forEach(function(v) {
-        v.tokens.forEach(function(tv) {
-          if (tv.length < 5) return;
-          tokensA3.forEach(function(ta) {
+      Object.keys(_a3IndexPorNome).forEach(function(ch){
+        ch.split(' ').forEach(function(tc){
+          if (tc.length < 5) return;
+          toks.forEach(function(ta){
             if (ta.length < 5) return;
-            var d = levenshtein(ta, tv);
-            if (d === 1) {  // exatamente 1 — grafia levemente errada
-              if (d < melhorDist) {
-                melhorDist = d; melhor = v.r; ambiguo = false;
-              } else if (d === melhorDist && melhor && melhor['Nome'] !== v.r['Nome']) {
-                ambiguo = true;
-              }
+            var d = levenshtein(ta, tc);
+            if (d === 1) {
+              if (d < melhorDist) { melhorDist=d; melhor=_a3IndexPorNome[ch]; ambiguo=false; }
+              else if (d===melhorDist && melhor && melhor.atleta_id !== _a3IndexPorNome[ch].atleta_id) { ambiguo=true; }
             }
           });
         });
@@ -806,94 +823,38 @@ async function iniciarM3(){
     }
 
     var baseElenco;
-    if (window._a3Ativos.length > 0) {
-      var semVolt    = [];
-      var ambiguos   = [];
-      var grafiasDif = [];
+    var semA3 = [];    // atletas VOLT sem registro A3
+    var grafiasDif = []; // matches fuzzy
 
-      baseElenco = window._a3Ativos.map(function(a){
-        var ref      = a.nome_nsp || a.nome_atleta || '';
-        var refNorm  = a3NormalizeNome(ref);
-        var tokens   = refNorm.split(' ');
-        var primeiro = tokens[0];
+    // BASE = VOLT — sempre 39 atletas (ou o que estiver no VOLT)
+    baseElenco = cadastro.map(function(r){
+      var nomeVolt = r['Nome'] || '';
+      var a3 = buscarA3(nomeVolt, r['Nome Completo']);
 
-        // (a+b): nome_nsp vs Nome e Nome Completo — match exato
-        var volt = _voltIndex[refNorm] || null;
+      if (!a3) {
+        semA3.push(nomeVolt);
+      } else if (a3NormalizeNome(a3.nome_nsp||a3.nome_atleta||'') !== a3NormalizeNome(nomeVolt)) {
+        grafiasDif.push('"' + nomeVolt + '" \u2194 A3:"' + (a3.nome_nsp||a3.nome_atleta) + '"');
+      }
 
-        // (c): primeiro token único — só casa se o nome_nsp tem UM único token
-        // (ex: "Andrey" → único no VOLT → casa; "Pedro Henrique" → 2 tokens → não entra aqui)
-        if (!volt && tokens.length === 1 && primeiro) {
-          var countC = _voltTokenCount[primeiro] || 0;
-          if (countC === 1) {
-            volt = _voltIndex[primeiro] || null;
-          } else if (countC > 1) {
-            ambiguos.push(ref + ' (' + (a.atleta_id||'?') + ') — "' + primeiro + '" ambíguo (' + countC + 'x)');
-          }
-        }
+      var posicao = (a3 && (a3.posicao_codigo || a3.posicao_label || a3.posicao_principal))
+        || r['Posi\u00e7\u00e3o'] || '\u2014';
 
-        // (c2): nome_nsp com múltiplos tokens — tenta primeiro token só se
-        // o segundo token também bate com algum token do candidato VOLT
-        if (!volt && tokens.length > 1) {
-          var countC2 = _voltTokenCount[primeiro] || 0;
-          if (countC2 === 1) {
-            var candidato = _voltIndex[primeiro];
-            if (candidato) {
-              // Verificar se pelo menos um outro token do A3 bate com algum token do VOLT
-              var nCandidato = a3NormalizeNome(candidato['Nome']);
-              var toksCandidato = nCandidato.split(' ');
-              var outroTokenBate = tokens.slice(1).some(function(t2) {
-                return toksCandidato.some(function(tc) { return tc === t2; });
-              });
-              if (outroTokenBate) volt = candidato;
-              // se não bate, não casa — Pedro Favorito ≠ Pedro Henrique
-            }
-          } else if (countC2 > 1) {
-            ambiguos.push(ref + ' (' + (a.atleta_id||'?') + ') — "' + primeiro + '" ambíguo (' + countC2 + 'x)');
-          }
-        }
+      return {
+        nome:         nomeVolt,                        // VOLT = fonte oficial do nome
+        atleta_id:    a3 ? a3.atleta_id : null,        // A3 = fonte do ID
+        posicao:      posicao,
+        volt:         r,                               // sempre tem VOLT
+        _cargaSemana: a3 ? a3CargaSemana(a3.atleta_id) : 0
+      };
+    });
 
-        // (d): fuzzy Levenshtein dist≤1 len≥5 — Bryan→Brayan automático
-        if (!volt) {
-          var jaAmb = ambiguos.some(function(s){ return s.indexOf(ref + ' (') === 0; });
-          if (!jaAmb) {
-            var fuzzy = fuzzyVolt(tokens);
-            if (fuzzy) {
-              volt = fuzzy;
-              if (a3NormalizeNome(fuzzy['Nome']) !== refNorm) {
-                grafiasDif.push('"' + ref + '" \u2192 "' + fuzzy['Nome'] + '" (' + (a.atleta_id||'?') + ')');
-              }
-            } else {
-              semVolt.push(ref + ' (' + (a.atleta_id||'?') + ')');
-            }
-          }
-        }
-
-        return {
-          nome:         volt ? volt['Nome'] : ref,  // VOLT é a fonte oficial
-          atleta_id:    a.atleta_id,
-          posicao:      a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
-          volt:         volt || null,
-          _cargaSemana: a3CargaSemana(a.atleta_id)
-        };
-      });
-
-      var total = window._a3Ativos.length;
-      var nOk   = total - semVolt.length - ambiguos.length;
-      console.log('[M3] Join A3\u2194VOLT: ' + nOk + '/' + total
-        + (grafiasDif.length ? ' | grafia corrigida: ' + grafiasDif.length : '')
-        + (ambiguos.length   ? ' | amb\u00edguo: '     + ambiguos.length   : '')
-        + (semVolt.length    ? ' | sem match: '        + semVolt.length    : ''));
-      if (grafiasDif.length) console.info('[M3] Grafia corrigida (A3\u2192VOLT):', grafiasDif.join(' | '));
-      if (ambiguos.length)   console.warn('[M3] Amb\u00edguos:', ambiguos.join(' | '));
-      if (semVolt.length)    console.warn('[M3] Sem VOLT:', semVolt.join(' | '));
-
-    } else {
-      // Fallback VOLT
-      console.warn('[M3] A3 Mapeamento vazio — usando cadastro VOLT como fallback');
-      baseElenco = cadastro.map(function(r){
-        return { nome: r['Nome'].trim(), atleta_id: null, posicao: r['Posi\u00e7\u00e3o'] || '\u2014', volt: r, _cargaSemana: 0 };
-      });
-    }
+    var total = baseElenco.length;
+    console.log('[M3] Base: ' + total + ' atletas (VOLT)'
+      + (grafiasDif.length ? ' | grafia: ' + grafiasDif.length : '')
+      + (semA3.length      ? ' | sem A3: ' + semA3.length      : ''));
+    if (grafiasDif.length) console.info('[M3] Grafia:', grafiasDif.join(' | '));
+    if (semA3.length)      console.info('[M3] Sem A3 (sem atleta_id):', semA3.join(', '));
 
     // buildAtletasM3 recebe a base enriquecida: passa nome como chave para clinical/disciplina
     dadosM3 = baseElenco.map(function(a){
