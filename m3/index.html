@@ -747,25 +747,40 @@ async function iniciarM3(){
 
     // ── PATCH 3: base do elenco = Mapeamento A3 ───────────────────
     // Fallback: se A3 falhar ou estiver vazio, usa cadastro VOLT
+
+    // Índice VOLT por nome normalizado (join rápido e robusto)
+    var _voltIndex = {};
+    cadastro.forEach(function(r){
+      var n = a3NormalizeNome(r['Nome']);
+      if (n) _voltIndex[n] = r;
+    });
+
     var baseElenco;
     if (window._a3Ativos.length > 0) {
       baseElenco = window._a3Ativos.map(function(a){
-        var nome = a.nome_nsp || a.nome_atleta || '';
+        var nome     = a.nome_nsp || a.nome_atleta || '';
         var nomeNorm = a3NormalizeNome(nome);
-        var primeiroToken = nomeNorm.split(' ')[0];
-        // Join VOLT: tenta nome completo → primeiro token (nomes curtos no VOLT)
-        var volt = cadastro.find(function(v){
-          var vNorm = a3NormalizeNome(v['Nome']);
-          return vNorm === nomeNorm || vNorm === primeiroToken;
-        });
-        // PATCH 6: log se sem VOLT
+        var tokens   = nomeNorm.split(' ');
+
+        // Join VOLT em 4 tentativas, da mais precisa para a mais tolerante:
+        // 1. nome_nsp completo normalizado ("andrey ventura")
+        // 2. nome_atleta completo normalizado
+        // 3. primeiro token ("andrey")
+        // 4. último token ("ventura") — apelidos
+        var volt = _voltIndex[nomeNorm]
+          || (a.nome_atleta ? _voltIndex[a3NormalizeNome(a.nome_atleta)] : null)
+          || (tokens[0]     ? _voltIndex[tokens[0]]                      : null)
+          || (tokens.length > 1 ? _voltIndex[tokens[tokens.length-1]]    : null)
+          || null;
+
+        // PATCH 6: log reduzido — só se sem VOLT após todas tentativas
         if (!volt) console.warn('[M3] Sem VOLT:', nome);
+
         return {
-          nome:      volt ? volt['Nome'] : nome,  // usar nome do VOLT quando disponível
-          atleta_id: a.atleta_id,
-          // PATCH 5: posição oficial do Mapeamento
-          posicao:   a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
-          volt:      volt || null,
+          nome:         volt ? volt['Nome'] : nome,
+          atleta_id:    a.atleta_id,
+          posicao:      a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
+          volt:         volt || null,
           _cargaSemana: a3CargaSemana(a.atleta_id)
         };
       });
