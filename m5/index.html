@@ -1597,25 +1597,116 @@ function a3MapNomeVolt(nomeA3, mapeamento){
   return match ? (match['nome_nsp']||match['nome_atleta']||'').trim() : null;
 }
 
-// Seleciona a partida mais recente (ou próxima) da lista de Partidas
+// Lê campo de uma row com múltiplos aliases (resiliente a diferentes headers de planilha)
+function a3Campo(row, aliases){
+  for(var i=0;i<aliases.length;i++){
+    var v = row[aliases[i]];
+    if(v!==undefined && v!==null && (v+'').trim()!=='') return (v+'').trim();
+  }
+  return '';
+}
+
+// Detecta se uma string parece data (DD/MM/YYYY ou YYYY-MM-DD)
+function a3ParseData(s){
+  if(!s||!s.trim()) return null;
+  s = s.trim();
+  try{
+    if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){
+      var p=s.split('/'); return new Date(p[2]+'-'+p[1]+'-'+p[0]);
+    }
+    if(/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s.substring(0,10));
+  }catch(e){}
+  return null;
+}
+
+// Retorna o valor de data de uma row de Partidas (tenta múltiplos campos)
+function a3GetDataPartida(row){
+  var campos = Object.keys(row);
+  // Prioridade: campo chamado 'data' ou qualquer campo com valor que pareça data
+  var tentativas = ['data','date','data_jogo','data_partida'];
+  for(var i=0;i<tentativas.length;i++){
+    var d = a3ParseData(row[tentativas[i]]);
+    if(d) return d;
+  }
+  // Buscar em todos os campos o primeiro que pareça data
+  for(var i=0;i<campos.length;i++){
+    var d = a3ParseData(row[campos[i]]);
+    if(d) return d;
+  }
+  return null;
+}
+
+// Retorna o ano/temporada de uma row de Partidas
+function a3GetTemporadaPartida(row){
+  var v = a3Campo(row, ['temp','temporada','ano','season','temporada_id']);
+  // Se o valor parecer um ano (4 dígitos)
+  if(/^\d{4}$/.test(v)) return v;
+  // Tentar extrair ano de uma data
+  var d = a3GetDataPartida(row);
+  if(d) return String(d.getFullYear());
+  return '';
+}
+
+// Seleciona a partida mais recente de 2026 (temporada atual)
+// Fallback: mais recente geral
 function a3SelecionarPartida(partidas){
   if(!partidas||!partidas.length) return null;
-  // Filtrar partidas com data
-  var comData = partidas.filter(function(p){ return p['data']&&p['data'].trim(); });
-  if(!comData.length) return partidas[0]; // fallback: primeira
+
+  // Log dos headers disponíveis para diagnóstico
+  if(partidas.length>0){
+    console.log('[M5] Partidas — headers disponíveis:', Object.keys(partidas[0]).join(', '));
+    console.log('[M5] Partidas — primeira row:', JSON.stringify(partidas[0]));
+    console.log('[M5] Partidas — última row:', JSON.stringify(partidas[partidas.length-1]));
+  }
+
   var hoje = new Date();
-  // Tenta encontrar a mais recente (passada) ou a próxima (futura)
-  var passadas = [], futuras = [];
-  comData.forEach(function(p){
-    try{
-      var partes = p['data'].split('/');
-      var d = partes.length===3 ? new Date(partes[2]+'-'+partes[1]+'-'+partes[0]) : new Date(p['data']);
-      if(d<=hoje) passadas.push({p:p,d:d}); else futuras.push({p:p,d:d});
-    }catch(e){ passadas.push({p:p,d:new Date(0)}); }
+  var todasComData = [];
+
+  partidas.forEach(function(p){
+    var d = a3GetDataPartida(p);
+    var temp = a3GetTemporadaPartida(p);
+    var pid = a3Campo(p, ['partida_id','id','jogo_id','game_id']) || p[Object.keys(p)[0]];
+    if(d) todasComData.push({p:p, d:d, temp:temp, pid:pid});
   });
-  if(passadas.length) return passadas.sort(function(a,b){return b.d-a.d;})[0].p; // mais recente passada
-  if(futuras.length) return futuras.sort(function(a,b){return a.d-b.d;})[0].p;   // próxima futura
-  return comData[0];
+
+  if(!todasComData.length){
+    console.warn('[M5] Nenhuma partida com data detectável. Usando primeira linha.');
+    return partidas[0];
+  }
+
+  // PRIORIDADE 1: mais recente passada de 2026
+  var passadas2026 = todasComData.filter(function(x){ return x.d<=hoje && x.temp==='2026'; });
+  if(passadas2026.length){
+    var sel = passadas2026.sort(function(a,b){return b.d-a.d;})[0].p;
+    console.log('[M5] Selecionada partida 2026 mais recente:', a3Campo(sel,['partida_id','id'])||'?');
+    return sel;
+  }
+
+  // PRIORIDADE 2: próxima futura de 2026
+  var futuras2026 = todasComData.filter(function(x){ return x.d>hoje && x.temp==='2026'; });
+  if(futuras2026.length){
+    var sel = futuras2026.sort(function(a,b){return a.d-b.d;})[0].p;
+    console.log('[M5] Selecionada próxima partida 2026:', a3Campo(sel,['partida_id','id'])||'?');
+    return sel;
+  }
+
+  // PRIORIDADE 3: mais recente geral (qualquer temporada)
+  var passadas = todasComData.filter(function(x){ return x.d<=hoje; });
+  if(passadas.length){
+    var sel = passadas.sort(function(a,b){return b.d-a.d;})[0].p;
+    console.log('[M5] Fallback: partida mais recente geral:', a3Campo(sel,['partida_id','id'])||'?');
+    return sel;
+  }
+
+  // PRIORIDADE 4: mais próxima no futuro
+  var sel = todasComData.sort(function(a,b){return a.d-b.d;})[0].p;
+  console.log('[M5] Fallback final: próxima futura:', a3Campo(sel,['partida_id','id'])||'?');
+  return sel;
+}
+
+// Extrai o partida_id de uma row de Partidas
+function a3GetPartidaId(row){
+  return a3Campo(row, ['partida_id','id','jogo_id','game_id']) || (row ? row[Object.keys(row)[0]] : '');
 }
 
 // Preenche decisoes {nome_volt: 'titular'|'banco'|'fora'} a partir de Escalacao_Jogo e Relacionados
@@ -1623,47 +1714,61 @@ function a3PopularDecisoes(jogo, escalacao, relacionados, mapeamento, dadosAtlet
   var newDecisoes = {};
   if(!jogo) return newDecisoes;
 
-  var partida_id = jogo['partida_id'] || jogo['id'] || '';
+  var partida_id = a3GetPartidaId(jogo);
+  console.log('[M5] partida_id para filtro:', partida_id);
+
+  // Log headers das abas para diagnóstico
+  if(escalacao.length>0) console.log('[M5] Escalacao headers:', Object.keys(escalacao[0]).join(', '));
+  if(relacionados.length>0) console.log('[M5] Relacionados headers:', Object.keys(relacionados[0]).join(', '));
 
   // Mapeia atleta_id → nome_volt usando Mapeamento
   var idParaNomeVolt = {};
   mapeamento.forEach(function(r){
-    if(r['atleta_id']&&r['nome_nsp']) idParaNomeVolt[r['atleta_id'].trim()] = r['nome_nsp'].trim();
+    var aid = a3Campo(r,['atleta_id','id_atleta','athlete_id']);
+    var nnsp = a3Campo(r,['nome_nsp','nome_volt','nome','name','nome_atleta']);
+    if(aid && nnsp) idParaNomeVolt[aid] = nnsp;
   });
 
   // Popula a partir de Escalacao_Jogo (titulares e banco)
   var escalJogo = escalacao.filter(function(r){
-    return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+    var pid = a3Campo(r,['partida_id','jogo_id','game_id']);
+    return !partida_id || pid===partida_id;
   });
   console.log('[M5] Escalacao_Jogo p/ partida', partida_id, ':', escalJogo.length, 'rows');
 
   escalJogo.forEach(function(r){
-    var aid = (r['atleta_id']||'').trim();
-    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(r['nome_atleta'], mapeamento);
+    var aid = a3Campo(r,['atleta_id','id_atleta','athlete_id']);
+    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(a3Campo(r,['nome_atleta','nome','name']), mapeamento);
     if(!nomev) return;
-    // Encontrar nome exato no dadosAtletas (VOLT)
     var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
     if(!found) return;
-    var tipo = (r['posicao_escalacao']||r['tipo']||'banco').toLowerCase();
-    if(tipo.indexOf('titular')>=0 || tipo.indexOf('11')>=0 || tipo==='1') newDecisoes[found.nome]='titular';
+    var tipo = a3Campo(r,['tipo','type','posicao_escalacao','role','funcao']).toLowerCase();
+    if(tipo.indexOf('titular')>=0 || tipo==='t' || tipo==='1') newDecisoes[found.nome]='titular';
     else newDecisoes[found.nome]='banco';
   });
 
   // Popula a partir de Relacionados (adiciona quem está no banco/fora se ainda não mapeado)
   var relJogo = relacionados.filter(function(r){
-    return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+    var pid = a3Campo(r,['partida_id','jogo_id','game_id']);
+    return !partida_id || pid===partida_id;
   });
   console.log('[M5] Relacionados p/ partida', partida_id, ':', relJogo.length, 'rows');
 
   relJogo.forEach(function(r){
-    var aid = (r['atleta_id']||'').trim();
-    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(r['nome_atleta'], mapeamento);
+    var aid = a3Campo(r,['atleta_id','id_atleta','athlete_id']);
+    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(a3Campo(r,['nome_atleta','nome','name']), mapeamento);
     if(!nomev) return;
     var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
     if(!found) return;
     if(!newDecisoes[found.nome]){
-      var status = (r['status']||'banco').toLowerCase();
-      newDecisoes[found.nome] = (status.indexOf('fora')>=0||status.indexOf('ausente')>=0) ? 'fora' : 'banco';
+      var status = a3Campo(r,['status','situacao','disponibilidade']).toLowerCase();
+      var rel = a3Campo(r,['relacionado','relacionado_sn','in_list']);
+      // Se explicitamente não relacionado ou fora
+      if(rel==='N'||status.indexOf('fora')>=0||status.indexOf('suspen')>=0||status.indexOf('ausente')>=0){
+        newDecisoes[found.nome] = 'fora';
+      } else {
+        newDecisoes[found.nome] = 'banco';
+      }
     }
   });
 
@@ -1746,9 +1851,11 @@ async function iniciarM5(){
 
     // Atualizar PROX_JOGO com dados reais do A3
     if(_jogoSelecionado){
-      PROX_JOGO.adversario  = _jogoSelecionado['adversario'] || _jogoSelecionado['opponent'] || PROX_JOGO.adversario;
-      PROX_JOGO.data        = _jogoSelecionado['data'] || PROX_JOGO.data;
-      PROX_JOGO.competicao  = _jogoSelecionado['competicao'] || _jogoSelecionado['competition'] || PROX_JOGO.competicao;
+      PROX_JOGO.adversario  = a3Campo(_jogoSelecionado,['adversario','visitante','opponent','adv','nome_adversario']) || PROX_JOGO.adversario;
+      var dataRaw = a3Campo(_jogoSelecionado,['data','date','data_jogo','data_partida']);
+      // Detectar se a temporada/data foi lida corretamente (YYYY-MM-DD ou DD/MM/YYYY)
+      if(dataRaw && (a3ParseData(dataRaw))) PROX_JOGO.data = dataRaw;
+      PROX_JOGO.competicao  = a3Campo(_jogoSelecionado,['competicao','competition','comp','campeonato','fase_temporada','mandante']) || PROX_JOGO.competicao;
       if(PROX_JOGO.data){
         try{
           var partes = PROX_JOGO.data.split('/');
