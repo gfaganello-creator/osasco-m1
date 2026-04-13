@@ -405,12 +405,15 @@ function a3ParseCSV(txt) {
   var ls=txt.split('\n').filter(function(l){return l.trim();});
   if (ls.length<2) return [];
   function sp(line){var r=[],c='',q=false;for(var i=0;i<line.length;i++){var ch=line[i];if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c.replace(/^"|"$/g,'').trim());c='';}else{c+=ch;}}r.push(c.replace(/^"|"$/g,'').trim());return r;}
-  // Normalizar headers: pegar apenas a primeira linha do valor (antes de \n ou \r)
-  // e remover caracteres não-ASCII (emojis, símbolos de proteção do Google Sheets)
+  // Normalizar headers do Google Sheets: colunas protegidas chegam como
+  // "atleta_id ABA PROTEGIDA Gerenciada automaticamente..."
+  // Manter apenas a parte que forma um nome de campo válido (snake_case)
   function normHeader(h) {
-    return (h||'').split('\n')[0].split('\r')[0]
-      .replace(/[^\x00-\x7F]/g,'')  // remove não-ASCII (emojis, 🛑)
-      .trim();
+    // Remove não-ASCII (emojis 🛑), pega só a-z, 0-9, _ e espaço, depois trim
+    var clean = (h||'').replace(/[^\x00-\x7F]/g,'').trim();
+    // Pegar apenas o primeiro token que seja um identificador válido (a-z/0-9/_)
+    var match = clean.match(/^([a-z][a-z0-9_]*)/i);
+    return match ? match[1].toLowerCase() : '';
   }
   var hs=sp(ls[0]).map(normHeader);
   return ls.slice(1).map(function(l){var vs=sp(l),o={};hs.forEach(function(h,i){if(h) o[h]=(vs[i]||'').trim();});return o;});
