@@ -503,9 +503,13 @@ function a3ParseCSV(txt) {
     return r;
   }
   function normHeader(h) {
-    var clean = (h||'').replace(/[^\x00-\x7F]/g,'').trim();
-    var match = clean.match(/^([a-z][a-z0-9_]*)/i);
-    return match ? match[1].toLowerCase() : '';
+    var clean = (h||'').replace(/[^\x00-\x7F]/g,' ').replace(/\s+/g,' ').trim();
+    var tokens = clean.split(' ');
+    for (var i=0; i<tokens.length; i++) {
+      if (/^[a-z][a-z0-9_]*$/.test(tokens[i]) && tokens[i].length > 1) return tokens[i];
+    }
+    var fb = clean.match(/^([a-zA-Z][a-zA-Z0-9_]*)/);
+    return fb ? fb[1].toLowerCase() : '';
   }
   var hs = splitLine(ls[0]).map(normHeader);
   return ls.slice(1).map(function(l){
