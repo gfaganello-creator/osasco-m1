@@ -430,7 +430,7 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
         <th onclick="sortBy('ratio')">Carga 7d <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('min7')">Min 7d <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('min21')">Min 21d <span class="sort-arrow">&#8597;</span></th>
-        <th onclick="sortBy('minTemp')" title="Minutos totais na temporada (Arquivo 3 v6 / Pos_Jogo)">Min Temp <span class="sort-arrow">&#8597;</span></th>
+        <th onclick="sortBy('minTemp')" title="Minutos totais na temporada (Arquivo 3 v6 / Pos_Jogo)" style="width:90px;text-align:center">Min Temp <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('dor')">Dor <span class="sort-arrow">&#8597;</span></th>
         <th>Alertas</th>
         <th>Disponib.</th>
@@ -533,6 +533,8 @@ function a3NormalizeNome(n) {
   return (n||'')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\./g,'')
+    .replace(/[^a-z\s]/g,'')
     .replace(/\s+/g,' ')
     .trim();
 }
@@ -1200,8 +1202,9 @@ function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
   dadosAtletas = cadastro.map(r => {
     var atletaData = calcularScore(r['Nome'], nspData, desempRows, mapeamento);
     // ── Arquivo 3 v6: enriquecer com atleta_id e minutos da temporada ──
-    var atletaId = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
-    if (!atletaId) { console.warn('[A3] Atleta não mapeado:', r['Nome']); }
+    var nomeNormalizado = a3NormalizeNome(r['Nome']);
+    var atletaId = _a3NspIndex[nomeNormalizado] || null;
+    if (!atletaId) { console.warn('[A3] NÃO MAPEADO:', r['Nome']); }
     atletaData.atleta_id     = atletaId;
     atletaData.minutosTotais = atletaId ? (_a3MinutosMap[atletaId] || 0) : null;
     return atletaData;
@@ -1403,7 +1406,7 @@ function renderTabela() {
       <td><span class="${ratioClass}">${ratioDisplay}</span></td>
       <td><span class="mono-val">${a.min7d}'</span></td>
       <td><span class="mono-val">${a.min21d}'</span></td>
-      <td><span class="mono-val" title="Minutos na temporada 2026 (Arquivo 3 v6)">${(function(){ var minutosDisplay = '—'; if(a.atleta_id){ var min = _a3MinutosMap[a.atleta_id] || 0; minutosDisplay = min + 'min'; } else { minutosDisplay = '⚠'; } return minutosDisplay; })()}</span></td>
+      <td style="text-align:center;min-width:90px;white-space:nowrap"><span class="mono-val" title="Minutos na temporada 2026 (Arquivo 3 v6)">${(function(){ var minutosDisplay = '—'; if(a.atleta_id){ var m = a.minutosTotais || 0; minutosDisplay = m + 'min'; } else { minutosDisplay = '<span style="color:#f59e0b;font-weight:600">⚠</span>'; } return minutosDisplay; })()}</span></td>
       <td>${dorHtml}</td>
       <td><div class="alerts-cell">${alertsHtml}</div></td>
       <td><span class="${decClass}">${a.decisao}</span></td>
