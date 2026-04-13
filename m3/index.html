@@ -485,6 +485,59 @@ var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
 var CARTOES_MOCK = [];
 
+// ════════════════════════════════════════════════════════════════════
+// ARQUIVO 3 v6 — CONFIGURAÇÃO CENTRAL (P0)
+// ════════════════════════════════════════════════════════════════════
+var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
+var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
+
+window.APP_CONTEXT = { temporada: '2026', ativosApenas: true };
+
+function a3NormalizeNome(n) {
+  return (n||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\./g,'')
+    .replace(/[^a-z\s]/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+async function a3Fetch(aba) {
+  try {
+    var r = await fetch(A3_BASE + encodeURIComponent(aba));
+    if (!r.ok) throw new Error(r.status);
+    return a3ParseCSV(await r.text());
+  } catch(e) {
+    console.warn('[A3] erro:', aba, e.message);
+    return [];
+  }
+}
+
+function a3ParseCSV(txt) {
+  if (!txt || !txt.trim()) return [];
+  var ls = txt.split('\n').filter(function(l){ return l.trim(); });
+  if (ls.length < 2) return [];
+  function splitLine(line) {
+    var r=[], c='', q=false;
+    for (var i=0; i<line.length; i++) {
+      var ch=line[i];
+      if (ch==='"') { q=!q; }
+      else if (ch===','&&!q) { r.push(c.replace(/^"|"$/g,'').trim()); c=''; }
+      else { c+=ch; }
+    }
+    r.push(c.replace(/^"|"$/g,'').trim());
+    return r;
+  }
+  var hs = splitLine(ls[0]);
+  return ls.slice(1).map(function(l){
+    var vs=splitLine(l), o={};
+    hs.forEach(function(h,i){ o[h]=(vs[i]||'').trim(); });
+    return o;
+  });
+}
+// ── Fim Arquivo 3 v6 ─────────────────────────────────────────────
+
 var dadosM3 = [];
 
 function urlSheet(sid, aba){
@@ -516,6 +569,17 @@ function parseCSV(txt){
     }
   });
   return rows;
+}
+
+// ── Arquivo 3 v6: carga semanal por atleta (Treinos_Semana) ──────
+function a3CargaSemana(atletaId) {
+  var arr = (window._a3TreinosPorAtleta || {})[atletaId] || [];
+  var total = 0;
+  arr.forEach(function(t){
+    var c = Number(t.carga_subjetiva);
+    if (!isNaN(c)) total += c;
+  });
+  return total;
 }
 
 // \u2500\u2500 Build athlete list from NSP cadastro \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -638,7 +702,80 @@ async function iniciarM3(){
     var epiRows  = parseCSV(get(1));
     var cartoes  = CARTOES_MOCK;
 
-    dadosM3 = buildAtletasM3(cadastro, epiRows, cartoes);
+    // ── PATCH 1: Mapeamento A3 (base do elenco) ───────────────────
+    var a3Mapeamento = await a3Fetch('Mapeamento');
+    window._a3Ativos = a3Mapeamento.filter(function(r){
+      return (r.status_ativo||'').toLowerCase() === 'ativo';
+    });
+    window._a3PorId    = {};
+    window._a3NspIndex = {};
+    window._a3Ativos.forEach(function(r){
+      if (!r.atleta_id) return;
+      window._a3PorId[r.atleta_id] = r;
+      if (r.nome_nsp) window._a3NspIndex[a3NormalizeNome(r.nome_nsp)] = r.atleta_id;
+    });
+    console.log('[M3/A3] Mapeamento ativos:', window._a3Ativos.length,
+                '| nspIndex:', Object.keys(window._a3NspIndex).length);
+
+    // ── PATCH 2: Treinos_Semana ───────────────────────────────────
+    var a3Treinos = await a3Fetch('Treinos_Semana');
+    var treinosFiltrados = a3Treinos.filter(function(r){
+      return !r.temporada || r.temporada === window.APP_CONTEXT.temporada;
+    });
+    window._a3TreinosPorAtleta = {};
+    treinosFiltrados.forEach(function(r){
+      var id = r.atleta_id;
+      if (!id) return;
+      if (!window._a3TreinosPorAtleta[id]) window._a3TreinosPorAtleta[id] = [];
+      window._a3TreinosPorAtleta[id].push(r);
+    });
+    console.log('[M3/A3] Treinos_Semana filtrados:', treinosFiltrados.length);
+
+    // ── PATCH 3: base do elenco = Mapeamento A3 ───────────────────
+    // Fallback: se A3 falhar ou estiver vazio, usa cadastro VOLT
+    var baseElenco;
+    if (window._a3Ativos.length > 0) {
+      baseElenco = window._a3Ativos.map(function(a){
+        var nome = a.nome_nsp || a.nome_atleta || '';
+        var volt = cadastro.find(function(v){
+          return a3NormalizeNome(v['Nome']) === a3NormalizeNome(nome);
+        });
+        // PATCH 6: log se sem VOLT
+        if (!volt) console.warn('[M3] Sem VOLT:', nome);
+        return {
+          nome:      nome,
+          atleta_id: a.atleta_id,
+          // PATCH 5: posição oficial do Mapeamento
+          posicao:   a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
+          volt:      volt || null,
+          _cargaSemana: a3CargaSemana(a.atleta_id)
+        };
+      });
+    } else {
+      // Fallback VOLT
+      console.warn('[M3] A3 Mapeamento vazio — usando cadastro VOLT como fallback');
+      baseElenco = cadastro.map(function(r){
+        return { nome: r['Nome'].trim(), atleta_id: null, posicao: r['Posi\u00e7\u00e3o'] || '\u2014', volt: r, _cargaSemana: 0 };
+      });
+    }
+
+    // buildAtletasM3 recebe a base enriquecida: passa nome como chave para clinical/disciplina
+    dadosM3 = baseElenco.map(function(a){
+      var clinical     = buildClinical(a.nome, epiRows);
+      var disciplina   = buildDisciplina(a.nome, cartoes);
+      var disponibilidade = calcDisponibilidade(clinical, disciplina);
+      return {
+        nome:            a.nome,
+        atleta_id:       a.atleta_id,
+        posicao:         a.posicao,
+        _cargaSemana:    a._cargaSemana,
+        _clinical:       clinical,
+        _disciplina:     disciplina,
+        _disponibilidade: disponibilidade
+      };
+    });
+    // ─────────────────────────────────────────────────────────────
+
     renderM3();
   } catch(err) {
     console.error('[M3]', err);
