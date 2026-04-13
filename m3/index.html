@@ -757,6 +757,19 @@ async function iniciarM3(){
 
     var baseElenco;
     if (window._a3Ativos.length > 0) {
+      // DIAGNÓSTICO: logar primeiros 10 atletas para validar campos do Mapeamento
+      console.log('[M3/DIAG] Primeiros 10 atletas do Mapeamento:');
+      window._a3Ativos.slice(0, 10).forEach(function(a, i){
+        var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
+        console.log('[M3/DIAG] #'+(i+1),
+          '| atleta_id:', a.atleta_id || '—',
+          '| nome_volt:', a.nome_volt  || '(vazio)',
+          '| nome_nsp:',  a.nome_nsp   || '(vazio)',
+          '| nome_atleta:', a.nome_atleta || '(vazio)',
+          '| → lookup:', nomeRefVolt
+        );
+      });
+
       baseElenco = window._a3Ativos.map(function(a){
         // Chave de join priorizada: nome_volt > nome_nsp > nome_atleta
         var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
