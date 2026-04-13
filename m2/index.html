@@ -862,6 +862,11 @@ async function iniciarM2() {
     _a3NspIndex   = a3BuildNspIndex(a3Mapeamento);
     _a3PorId      = {};
     a3Mapeamento.forEach(function(r){ if(r.atleta_id) _a3PorId[r.atleta_id]=r; });
+    // DIAGNÓSTICO: mostrar colunas reais da primeira linha do Mapeamento
+    if (a3Mapeamento.length > 0) {
+      console.log('[M2/A3] Colunas Mapeamento:', Object.keys(a3Mapeamento[0]).join(' | '));
+      console.log('[M2/A3] Primeira linha:', JSON.stringify(a3Mapeamento[0]));
+    }
     _a3MinutosMap = a3MinutosPorAtleta(a3FiltrarTemporada(a3PosJogo));
     console.log('[M2/A3] Mapeamento:', a3Mapeamento.length,
                 '| nspIndex:', Object.keys(_a3NspIndex).length,
