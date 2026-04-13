@@ -430,6 +430,7 @@ td{padding:13px 16px;font-size:13px;color:var(--ink1);white-space:nowrap;vertica
         <th onclick="sortBy('ratio')">Carga 7d <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('min7')">Min 7d <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('min21')">Min 21d <span class="sort-arrow">&#8597;</span></th>
+        <th onclick="sortBy('minTemp')" title="Minutos totais na temporada (Arquivo 3 v6 / Pos_Jogo)">Min Temp <span class="sort-arrow">&#8597;</span></th>
         <th onclick="sortBy('dor')">Dor <span class="sort-arrow">&#8597;</span></th>
         <th>Alertas</th>
         <th>Disponib.</th>
@@ -461,6 +462,107 @@ var CARTOES_MOCK = [
 ];
 var epiRows = [];   // preenchido em runtime pelo fetch
 var cartoes = [];   // preenchido em runtime
+
+// ════════════════════════════════════════════════════════════════════
+// ARQUIVO 3 v6 — CONFIGURAÇÃO CENTRAL (P0)
+// Ponto único de configuração para todos os módulos.
+// ════════════════════════════════════════════════════════════════════
+var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
+var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
+
+// Contexto global da plataforma
+window.APP_CONTEXT = {
+  temporada:    '2026',
+  competicao:   'Todas',
+  ativosApenas: true
+};
+
+// Busca uma aba do Arquivo 3 — retorna [] em erro
+async function a3Fetch(aba) {
+  try {
+    var r = await fetch(A3_BASE + encodeURIComponent(aba));
+    if (!r.ok) throw new Error(r.status);
+    return a3ParseCSV(await r.text());
+  } catch(e) {
+    console.warn('[A3] Erro ao carregar aba:', aba, e.message);
+    return [];
+  }
+}
+
+// Parser robusto para o Arquivo 3 (suporta vírgulas e aspas dentro de campos)
+function a3ParseCSV(txt) {
+  if (!txt || !txt.trim()) return [];
+  var ls = txt.split('\n').filter(function(l){ return l.trim(); });
+  if (ls.length < 2) return [];
+  function splitLine(line) {
+    var r=[], c='', q=false;
+    for (var i=0; i<line.length; i++) {
+      var ch=line[i];
+      if (ch==='"') { q=!q; }
+      else if (ch===','&&!q) { r.push(c.replace(/^"|"$/g,'').trim()); c=''; }
+      else { c+=ch; }
+    }
+    r.push(c.replace(/^"|"$/g,'').trim());
+    return r;
+  }
+  var hs = splitLine(ls[0]);
+  return ls.slice(1).map(function(l){
+    var vs=splitLine(l), o={};
+    hs.forEach(function(h,i){ o[h]=(vs[i]||'').trim(); });
+    return o;
+  });
+}
+
+// Filtra atletas com status_ativo === 'Ativo' (case-insensitive)
+function a3FiltrarAtivos(mapeamento) {
+  return (mapeamento||[]).filter(function(r){
+    return (r.status_ativo||'').toLowerCase() === 'ativo';
+  });
+}
+
+// Filtra por temporada do APP_CONTEXT
+function a3FiltrarTemporada(rows, campo) {
+  var t = (window.APP_CONTEXT||{}).temporada;
+  if (!t) return rows;
+  var c = campo || 'temporada';
+  return (rows||[]).filter(function(r){ return !r[c] || r[c] === t; });
+}
+
+// Normalização robusta para match de nomes entre VOLT e Arquivo 3
+function a3NormalizeNome(n) {
+  return (n||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+// Monta índice nome_nsp → atleta_id (ponte VOLT → Arquivo 3)
+function a3BuildNspIndex(mapeamento) {
+  var idx = {};
+  (mapeamento||[]).forEach(function(r){
+    if (r.nome_nsp && r.atleta_id) idx[a3NormalizeNome(r.nome_nsp)] = r.atleta_id;
+  });
+  return idx;
+}
+
+// Soma minutos totais por atleta_id a partir de Pos_Jogo (ÚNICA fonte oficial)
+function a3MinutosPorAtleta(posJogoRows) {
+  var acc = {};
+  (posJogoRows||[]).forEach(function(r){
+    var id = r.atleta_id;
+    if (!id) return;
+    var min = Number(r.minutos); if(isNaN(min)) min = 0;
+    acc[id] = (acc[id]||0) + min;
+  });
+  return acc;
+}
+
+// Nome para display — nunca usar como chave de join
+function a3DisplayNome(row) {
+  return row.nome_atleta || row.nome_nsp || '—';
+}
+// ── Fim Arquivo 3 v6 ─────────────────────────────────────────────
 
 
 // Estado do próximo jogo — preenchido por fetchProximoJogo()
@@ -864,6 +966,10 @@ var filtroAtual  = 'todos';
 var sortCol      = 'score';
 var sortDir      = -1;
 
+// ── Arquivo 3 v6: índice e minutos (preenchidos em iniciar()) ─────
+var _a3NspIndex     = {};  // { nome_nsp: atleta_id }
+var _a3MinutosMap   = {};  // { atleta_id: totalMinutos }
+
 function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows, mapeamento) {
   const nNome = normalizarNome(atletaNome);
 
@@ -1092,7 +1198,13 @@ function processarDados(nspData, desempRows, mapeamento, _epiRows, _cartoes) {
   const { cadastro } = nspData;
 
   dadosAtletas = cadastro.map(r => {
-    return calcularScore(r['Nome'], nspData, desempRows, mapeamento);
+    var atletaData = calcularScore(r['Nome'], nspData, desempRows, mapeamento);
+    // ── Arquivo 3 v6: enriquecer com atleta_id e minutos da temporada ──
+    var atletaId = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
+    if (!atletaId) { console.warn('[A3] Atleta não mapeado:', r['Nome']); }
+    atletaData.atleta_id     = atletaId;
+    atletaData.minutosTotais = atletaId ? (_a3MinutosMap[atletaId] || 0) : null;
+    return atletaData;
   }).sort((a, b) => b.score - a.score);
 
   // Integração M6→M1: aplicar impacto pós-jogo se disponível
@@ -1227,6 +1339,7 @@ function renderTabela() {
     else if (sortCol === 'ratio')    { va = a.ratio; vb = b.ratio; }
     else if (sortCol === 'min7')     { va = a.min7d;  vb = b.min7d; }
     else if (sortCol === 'min21')    { va = a.min21d; vb = b.min21d; }
+    else if (sortCol === 'minTemp')  { va = a.minutosTotais ?? -1; vb = b.minutosTotais ?? -1; }
     else if (sortCol === 'dor')      { va = a.pdor;   vb = b.pdor; }
     else                             { va = a.score;  vb = b.score; }
     return sortDir * (vb - va);
@@ -1271,9 +1384,9 @@ function renderTabela() {
       ? a.alertas.map(al => `<span class="alert-tag alert-${al.t}">${al.m}</span>`).join('')
       : `<span style="color:var(--tx3);font-size:12px">\u2014</span>`;
 
-    return `<tr class="${rowClass}">
+    return `<tr class="${rowClass} row-link" onclick="abrirFicha(${JSON.stringify(a.nome)})" title="Ver ficha de ${a.nome}">
       <td><span class="pos-badge">${a.posicao}</span></td>
-      <td><span class="name-cell">${a.nome}</span></td>
+      <td><span class="name-cell name-link">${a.nome}</span></td>
       <td>
         <div class="score-cell">
           <span class="score-num ${scoreClass}">${a.score}</span>${
@@ -1290,6 +1403,7 @@ function renderTabela() {
       <td><span class="${ratioClass}">${ratioDisplay}</span></td>
       <td><span class="mono-val">${a.min7d}'</span></td>
       <td><span class="mono-val">${a.min21d}'</span></td>
+      <td><span class="mono-val" title="Minutos na temporada 2026 (Arquivo 3 v6)">${(function(){ var minutosDisplay = '—'; if(a.atleta_id){ var min = _a3MinutosMap[a.atleta_id] || 0; minutosDisplay = min + 'min'; } else { minutosDisplay = '⚠'; } return minutosDisplay; })()}</span></td>
       <td>${dorHtml}</td>
       <td><div class="alerts-cell">${alertsHtml}</div></td>
       <td><span class="${decClass}">${a.decisao}</span></td>
@@ -1311,7 +1425,7 @@ function sortBy(col) {
   if (sortCol === col) { sortDir *= -1; }
   else                 { sortCol = col; sortDir = -1; }
   document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
-  const thMap = { posicao:0, nome:1, score:2, classe:3, wellness:5, ratio:6, min7:7, min21:8, dor:9 };
+  const thMap = { posicao:0, nome:1, score:2, classe:3, wellness:5, ratio:6, min7:7, min21:8, minTemp:9, dor:10 };
   const idx = thMap[col];
   if (idx !== undefined) {
     const ths = document.querySelectorAll('thead th');
@@ -1419,7 +1533,13 @@ renderTabela = function() {
 
 // ── NAVEGAÇÃO PARA M2 ─────────────────────────────────────────────────
 function abrirFicha(nome) {
-  window.location.href = '../m2/index.html?atleta=' + encodeURIComponent(nome);
+  // Preferência: passar atleta_id (v6). Fallback: nome (legado)
+  var atletaObj = dadosAtletas.find(function(a){ return a.nome === nome; });
+  var atletaId  = atletaObj ? atletaObj.atleta_id : null;
+  var params    = atletaId
+    ? '?atleta_id=' + encodeURIComponent(atletaId) + '&nome=' + encodeURIComponent(nome)
+    : '?atleta=' + encodeURIComponent(nome);
+  window.location.href = '../m2/index.html' + params;
 }
 /* =========================
    APP INIT
@@ -1459,6 +1579,21 @@ async function iniciar() {
 
     fetchProximoJogo().catch(function() {});
 
+    // ── Arquivo 3 v6: buscar em paralelo (não bloqueia se falhar) ──
+    var a3Resultados = await Promise.allSettled([
+      a3Fetch('Mapeamento'),
+      a3Fetch('Pos_Jogo')
+    ]);
+    var a3Mapeamento = a3Resultados[0].status === 'fulfilled' ? a3Resultados[0].value : [];
+    var a3PosJogo    = a3Resultados[1].status === 'fulfilled' ? a3Resultados[1].value : [];
+    var a3Ativos     = a3FiltrarAtivos(a3Mapeamento);
+    var a3PosJogoT   = a3FiltrarTemporada(a3PosJogo);
+    _a3NspIndex      = a3BuildNspIndex(a3Ativos);
+    _a3MinutosMap    = a3MinutosPorAtleta(a3PosJogoT);
+    console.log('[M1/A3] Mapeamento ativos:', a3Ativos.length,
+                '| Pos_Jogo temporada:', a3PosJogoT.length,
+                '| nspIndex entradas:', Object.keys(_a3NspIndex).length);
+
     // Log por aba
     var _nomes = ['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico'];
     resultados.forEach(function(r, i) {
@@ -1484,6 +1619,9 @@ async function iniciar() {
     var cargaRows   = parseCSV(get(3)).filter(function(r)       { return r['Nome']; });
     var desempRows  = parseCSV(get(4)).filter(function(r)       { return r['atleta_nome']; });
     var mapeamento  = parseCSV(get(5)).filter(function(r) {
+      // v6: status_ativo === 'Ativo' | fallback: campo legado 'ativo' !== 'Não'
+      var statusAtivo = (r['status_ativo'] || '').trim();
+      if (statusAtivo) return statusAtivo.toLowerCase() === 'ativo';
       return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00e3o';
     });
     epiRows = parseCSV(get(6));
