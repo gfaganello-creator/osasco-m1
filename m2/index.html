@@ -409,11 +409,13 @@ function a3ParseCSV(txt) {
   // "atleta_id ABA PROTEGIDA Gerenciada automaticamente..."
   // Manter apenas a parte que forma um nome de campo válido (snake_case)
   function normHeader(h) {
-    // Remove não-ASCII (emojis 🛑), pega só a-z, 0-9, _ e espaço, depois trim
-    var clean = (h||'').replace(/[^\x00-\x7F]/g,'').trim();
-    // Pegar apenas o primeiro token que seja um identificador válido (a-z/0-9/_)
-    var match = clean.match(/^([a-z][a-z0-9_]*)/i);
-    return match ? match[1].toLowerCase() : '';
+    var clean = (h||'').replace(/[^\x00-\x7F]/g,' ').replace(/\s+/g,' ').trim();
+    var tokens = clean.split(' ');
+    for (var i=0; i<tokens.length; i++) {
+      if (/^[a-z][a-z0-9_]*$/.test(tokens[i]) && tokens[i].length > 1) return tokens[i];
+    }
+    var fb = clean.match(/^([a-zA-Z][a-zA-Z0-9_]*)/);
+    return fb ? fb[1].toLowerCase() : '';
   }
   var hs=sp(ls[0]).map(normHeader);
   return ls.slice(1).map(function(l){var vs=sp(l),o={};hs.forEach(function(h,i){if(h) o[h]=(vs[i]||'').trim();});return o;});
