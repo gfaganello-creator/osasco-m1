@@ -636,9 +636,11 @@ function setFilterBtn(f){
 var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
+var A3_SID     = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
+var A3_BASE    = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
 var CARTOES_MOCK = [];  // preencher com cartoes reais
 
-// Próximo jogo — editável
+// Próximo jogo — preenchido pelo A3/Partidas (editável como fallback)
 var PROX_JOGO = {
   adversario: 'Advers\u00e1rio',
   data: '',
@@ -646,9 +648,16 @@ var PROX_JOGO = {
   diasRestantes: null
 };
 
+// Estado A3
+var _a3Partidas    = [];   // rows brutas de Partidas
+var _a3Escalacao   = [];   // rows brutas de Escalacao_Jogo
+var _a3Relacionados= [];   // rows brutas de Relacionados
+var _a3Mapeamento  = [];   // rows brutas de Mapeamento
+var _jogoSelecionado = null; // row da partida selecionada
+
 // Estado
 var dadosAtletas = [];
-var decisoes     = {};  // {nome: 'titular'|'banco'|'fora'}
+var decisoes     = {};  // {nome: 'titular'|'banco'|'fora'} — preenchido pelo A3
 var sugestoes    = {};  // {nome: sug_obj} — pré-calculado
 var contextJogo  = 'd3'; // 'd3' | 'd1' | 'jogo'
 var filtroAtual  = 'todos';
@@ -1544,6 +1553,128 @@ function renderRelacionados(){
   document.getElementById('cnt-fora').textContent    = grupos.fora.length;
 }
 
+// ─── A3 Helpers ───────────────────────────────────────────────────────────
+function a3ParseCSV(txt){
+  if(!txt||!txt.trim()) return [];
+  var linhas = txt.split(/\r?\n/);
+  if(!linhas.length) return [];
+  var hdr = linhas[0].split(',').map(function(h){
+    return h.replace(/^"|"$/g,'').trim();
+  });
+  var out = [];
+  for(var i=1;i<linhas.length;i++){
+    var cols=[], cur='', inQ=false;
+    for(var c=0;c<linhas[i].length;c++){
+      var ch=linhas[i][c];
+      if(ch==='"'){ inQ=!inQ; }
+      else if(ch===','&&!inQ){ cols.push(cur); cur=''; }
+      else cur+=ch;
+    }
+    cols.push(cur);
+    var row={};
+    hdr.forEach(function(h,idx){ row[h]=(cols[idx]||'').replace(/^"|"$/g,'').trim(); });
+    out.push(row);
+  }
+  return out;
+}
+
+async function a3FetchAba(aba){
+  try{
+    var r = await fetch(A3_BASE + encodeURIComponent(aba));
+    if(!r.ok) return '';
+    return r.text();
+  }catch(e){ return ''; }
+}
+
+// Normaliza nome para comparação
+function a3NormNome(s){ return (s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' '); }
+
+// Acha atleta no A3/Mapeamento e retorna nome_nsp (para cruzar com VOLT)
+function a3MapNomeVolt(nomeA3, mapeamento){
+  if(!nomeA3) return null;
+  var na = a3NormNome(nomeA3);
+  var match = mapeamento.find(function(r){ return a3NormNome(r['nome_atleta'])===na || a3NormNome(r['nome_nsp'])===na; });
+  return match ? (match['nome_nsp']||match['nome_atleta']||'').trim() : null;
+}
+
+// Seleciona a partida mais recente (ou próxima) da lista de Partidas
+function a3SelecionarPartida(partidas){
+  if(!partidas||!partidas.length) return null;
+  // Filtrar partidas com data
+  var comData = partidas.filter(function(p){ return p['data']&&p['data'].trim(); });
+  if(!comData.length) return partidas[0]; // fallback: primeira
+  var hoje = new Date();
+  // Tenta encontrar a mais recente (passada) ou a próxima (futura)
+  var passadas = [], futuras = [];
+  comData.forEach(function(p){
+    try{
+      var partes = p['data'].split('/');
+      var d = partes.length===3 ? new Date(partes[2]+'-'+partes[1]+'-'+partes[0]) : new Date(p['data']);
+      if(d<=hoje) passadas.push({p:p,d:d}); else futuras.push({p:p,d:d});
+    }catch(e){ passadas.push({p:p,d:new Date(0)}); }
+  });
+  if(passadas.length) return passadas.sort(function(a,b){return b.d-a.d;})[0].p; // mais recente passada
+  if(futuras.length) return futuras.sort(function(a,b){return a.d-b.d;})[0].p;   // próxima futura
+  return comData[0];
+}
+
+// Preenche decisoes {nome_volt: 'titular'|'banco'|'fora'} a partir de Escalacao_Jogo e Relacionados
+function a3PopularDecisoes(jogo, escalacao, relacionados, mapeamento, dadosAtletas){
+  var newDecisoes = {};
+  if(!jogo) return newDecisoes;
+
+  var partida_id = jogo['partida_id'] || jogo['id'] || '';
+
+  // Mapeia atleta_id → nome_volt usando Mapeamento
+  var idParaNomeVolt = {};
+  mapeamento.forEach(function(r){
+    if(r['atleta_id']&&r['nome_nsp']) idParaNomeVolt[r['atleta_id'].trim()] = r['nome_nsp'].trim();
+  });
+
+  // Popula a partir de Escalacao_Jogo (titulares e banco)
+  var escalJogo = escalacao.filter(function(r){
+    return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+  });
+  console.log('[M5] Escalacao_Jogo p/ partida', partida_id, ':', escalJogo.length, 'rows');
+
+  escalJogo.forEach(function(r){
+    var aid = (r['atleta_id']||'').trim();
+    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(r['nome_atleta'], mapeamento);
+    if(!nomev) return;
+    // Encontrar nome exato no dadosAtletas (VOLT)
+    var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
+    if(!found) return;
+    var tipo = (r['posicao_escalacao']||r['tipo']||'banco').toLowerCase();
+    if(tipo.indexOf('titular')>=0 || tipo.indexOf('11')>=0 || tipo==='1') newDecisoes[found.nome]='titular';
+    else newDecisoes[found.nome]='banco';
+  });
+
+  // Popula a partir de Relacionados (adiciona quem está no banco/fora se ainda não mapeado)
+  var relJogo = relacionados.filter(function(r){
+    return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+  });
+  console.log('[M5] Relacionados p/ partida', partida_id, ':', relJogo.length, 'rows');
+
+  relJogo.forEach(function(r){
+    var aid = (r['atleta_id']||'').trim();
+    var nomev = idParaNomeVolt[aid] || a3MapNomeVolt(r['nome_atleta'], mapeamento);
+    if(!nomev) return;
+    var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
+    if(!found) return;
+    if(!newDecisoes[found.nome]){
+      var status = (r['status']||'banco').toLowerCase();
+      newDecisoes[found.nome] = (status.indexOf('fora')>=0||status.indexOf('ausente')>=0) ? 'fora' : 'banco';
+    }
+  });
+
+  // Atletas sem mapeamento explícito → 'fora'
+  dadosAtletas.forEach(function(a){
+    if(!newDecisoes[a.nome]) newDecisoes[a.nome]='fora';
+  });
+
+  return newDecisoes;
+}
+
 // ─── Main init ────────────────────────────────────────────────────────────
 async function iniciarM5(){
   var dot = document.getElementById('sync-dot');
@@ -1556,6 +1687,7 @@ async function iniciarM5(){
     var DES  = function(a){ return urlSheet(DESEMP_SID, a); };
     var EPI  = function(a){ return urlSheet(EPI_SID,    a); };
 
+    // Carregar VOLT + A3 em paralelo
     var resultados = await Promise.allSettled([
       fetchSheet(NSP('Cadastro')),
       fetchSheet(NSP('BD Recupera\u00e7\u00e3o e Prontid\u00e3o')),
@@ -1563,11 +1695,17 @@ async function iniciarM5(){
       fetchSheet(NSP('BD Controle de Carga')),
       fetchSheet(DES('Desempenho Individual')),
       fetchSheet(DES('Mapeamento')),
-      fetchSheet(EPI('Epidemiol\u00f3gico'))
+      fetchSheet(EPI('Epidemiol\u00f3gico')),
+      // A3 — \u00edndices 7,8,9,10
+      a3FetchAba('Partidas'),
+      a3FetchAba('Escalacao_Jogo'),
+      a3FetchAba('Relacionados'),
+      a3FetchAba('Mapeamento')
     ]);
 
     var get = function(i){ return resultados[i].status==='fulfilled'?resultados[i].value:''; };
-    var nomes=['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico'];
+    var nomes=['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Desempenho','Mapeamento','Epidemiol\u00f3gico',
+               'A3/Partidas','A3/Escalacao_Jogo','A3/Relacionados','A3/Mapeamento'];
     resultados.forEach(function(r,i){
       r.status==='fulfilled'
         ?console.log('[M5] \u2713',nomes[i],r.value.length+'ch')
@@ -1579,6 +1717,7 @@ async function iniciarM5(){
       throw new Error('Planilha Cadastro n\u00e3o acess\u00edvel');
     }
 
+    // Parse VOLT
     var cadastro    = parseCSV(get(0)).filter(function(r){return r['Nome']&&r['Nome'].trim();});
     var recuperacao = parseCSV(get(1)).filter(function(r){return r['Nome'];});
     var preTreino   = parseCSV(get(2)).filter(function(r){return r['Nome:']||r['Nome'];});
@@ -1589,14 +1728,54 @@ async function iniciarM5(){
     });
     var epiRows = parseCSV(get(6));
 
+    // Parse A3
+    _a3Partidas     = a3ParseCSV(get(7));
+    _a3Escalacao    = a3ParseCSV(get(8));
+    _a3Relacionados = a3ParseCSV(get(9));
+    _a3Mapeamento   = a3ParseCSV(get(10));
+
+    // LOG DIAGN\u00d3STICO
+    console.log('[M5/Partidas] linhas brutas:', _a3Partidas.length);
+    console.log('[M5/Escalacao_Jogo] linhas brutas:', _a3Escalacao.length);
+    console.log('[M5/Relacionados] linhas brutas:', _a3Relacionados.length);
+    console.log('[M5/Mapeamento A3] linhas brutas:', _a3Mapeamento.length);
+
+    // Selecionar partida
+    _jogoSelecionado = a3SelecionarPartida(_a3Partidas);
+    console.log('[M5] partida selecionada:', _jogoSelecionado ? JSON.stringify(_jogoSelecionado) : 'null');
+
+    // Atualizar PROX_JOGO com dados reais do A3
+    if(_jogoSelecionado){
+      PROX_JOGO.adversario  = _jogoSelecionado['adversario'] || _jogoSelecionado['opponent'] || PROX_JOGO.adversario;
+      PROX_JOGO.data        = _jogoSelecionado['data'] || PROX_JOGO.data;
+      PROX_JOGO.competicao  = _jogoSelecionado['competicao'] || _jogoSelecionado['competition'] || PROX_JOGO.competicao;
+      if(PROX_JOGO.data){
+        try{
+          var partes = PROX_JOGO.data.split('/');
+          var d = partes.length===3 ? new Date(partes[2]+'-'+partes[1]+'-'+partes[0]) : new Date(PROX_JOGO.data);
+          PROX_JOGO.diasRestantes = Math.ceil((d - new Date()) / 86400000);
+          if(PROX_JOGO.diasRestantes < 0) PROX_JOGO.diasRestantes = 0;
+        }catch(e){}
+      }
+    }
+
     // Expose globals needed by calcularScore
     window.epiRows  = epiRows;
     window.cartoes  = CARTOES_MOCK;
-    window.dtState  = { proxJogo:null, adversario:null, diasRestantes: PROX_JOGO.diasRestantes };
+    window.dtState  = { proxJogo:null, adversario:PROX_JOGO.adversario, diasRestantes: PROX_JOGO.diasRestantes };
 
     dtState = { proxJogo:null, adversario:PROX_JOGO.adversario, diasRestantes:PROX_JOGO.diasRestantes };
     dadosAtletas = buildAtletas(cadastro, recuperacao, preTreino, cargaRows, desempRows, mapeamento, epiRows, CARTOES_MOCK);
     console.log('[M5] Atletas carregados:', dadosAtletas.length);
+
+    // Popular decisoes a partir do A3
+    decisoes = a3PopularDecisoes(_jogoSelecionado, _a3Escalacao, _a3Relacionados, _a3Mapeamento, dadosAtletas);
+    var titulares = Object.values(decisoes).filter(function(v){return v==='titular';}).length;
+    var banco     = Object.values(decisoes).filter(function(v){return v==='banco';}).length;
+    var fora      = Object.values(decisoes).filter(function(v){return v==='fora';}).length;
+    console.log('[M5] titulares encontrados:', titulares);
+    console.log('[M5] banco encontrados:', banco);
+    console.log('[M5] fora encontrados:', fora);
 
     dot.className = 'sync-dot ok';
     lbl.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
