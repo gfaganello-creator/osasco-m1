@@ -758,26 +758,15 @@ async function iniciarM3(){
     var baseElenco;
     if (window._a3Ativos.length > 0) {
       baseElenco = window._a3Ativos.map(function(a){
-        var nome     = a.nome_nsp || a.nome_atleta || '';
-        var nomeNorm = a3NormalizeNome(nome);
-        var tokens   = nomeNorm.split(' ');
+        // Chave de join priorizada: nome_volt > nome_nsp > nome_atleta
+        var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
+        var nomeNorm    = a3NormalizeNome(nomeRefVolt);
+        var volt        = _voltIndex[nomeNorm] || null;
 
-        // Join VOLT em 4 tentativas, da mais precisa para a mais tolerante:
-        // 1. nome_nsp completo normalizado ("andrey ventura")
-        // 2. nome_atleta completo normalizado
-        // 3. primeiro token ("andrey")
-        // 4. último token ("ventura") — apelidos
-        var volt = _voltIndex[nomeNorm]
-          || (a.nome_atleta ? _voltIndex[a3NormalizeNome(a.nome_atleta)] : null)
-          || (tokens[0]     ? _voltIndex[tokens[0]]                      : null)
-          || (tokens.length > 1 ? _voltIndex[tokens[tokens.length-1]]    : null)
-          || null;
-
-        // PATCH 6: log reduzido — só se sem VOLT após todas tentativas
-        if (!volt) console.warn('[M3] Sem VOLT:', nome);
+        if (!volt) console.warn('[M3] Sem VOLT:', nomeRefVolt);
 
         return {
-          nome:         volt ? volt['Nome'] : nome,
+          nome:         volt ? volt['Nome'] : nomeRefVolt,
           atleta_id:    a.atleta_id,
           posicao:      a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
           volt:         volt || null,
