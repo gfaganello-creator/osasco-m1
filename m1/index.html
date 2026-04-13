@@ -1500,34 +1500,34 @@ renderTabela = function() {
     const isOK   = a.classe === 'OK';
     const isWarn = a.classe === 'Aten\u00E7\u00E3o';
     const scoreClass = isOK ? 'score-ok' : isWarn ? 'score-warn' : 'score-risk';
+    const barColor   = isOK ? 'var(--ok)' : isWarn ? 'var(--warn)' : 'var(--risk)';
+    const badgeClass = isOK ? 'badge-ok' : isWarn ? 'badge-warn' : 'badge-risk';
     const rowClass   = a.classe === 'Risco' ? 'row-risk' : '';
     const decClass   = isOK ? 'dec-ok' : isWarn ? 'dec-warn' : 'dec-risk';
     const nspClass   = a.tipoStatus === 'ok' ? 'nsp-apronto' : a.tipoStatus === 'alerta' ? 'nsp-alerta' : a.tipoStatus === 'reab' ? 'nsp-reab' : 'nsp-sem';
-    const gaugeColor = isOK ? 'var(--ok)' : isWarn ? 'var(--warn)' : 'var(--risk)';
-    const dashOffset = (C - (a.score / 100) * C).toFixed(2);
-    const ciClass = isOK ? 'ci-ok' : isWarn ? 'ci-warn' : 'ci-risk';
-    const qtDisplay = a.wellnessQt !== null ? a.wellnessQt + '/20' : '\u2014';
-    const qtClass   = a.wellnessQt !== null ? (a.wellnessQt >= 14 ? 'qt-ok' : a.wellnessQt >= 9 ? 'qt-warn' : 'qt-risk') : '';
+    const qtDisplay  = a.wellnessQt !== null ? a.wellnessQt + '/20' : '\u2014';
+    const qtClass    = a.wellnessQt !== null ? (a.wellnessQt >= 14 ? 'qt-ok' : a.wellnessQt >= 9 ? 'qt-warn' : 'qt-risk') : '';
     const ratioClass = a.ratio <= 1.10 ? 'ratio-ok' : a.ratio <= 1.45 ? 'ratio-warn' : 'ratio-risk';
-    let dorHtml = a.pdor === 0 ? '<span class="dor-zero">\u2014</span>' : a.pdor <= 2 ? '<span class="dor-leve">' + a.pdor + '</span>' : '<span class="dor-alt">' + a.pdor + '</span>';
+    const dorHtml    = a.pdor === 0 ? '<span class="dor-zero">\u2014</span>' : a.pdor <= 2 ? '<span class="dor-leve">' + a.pdor + '</span>' : '<span class="dor-alt">' + a.pdor + '</span>';
     const alertsHtml = a.alertas.length ? a.alertas.map(al => '<span class="alert-tag alert-' + al.t + '">' + al.m + '</span>').join('') : '<span style="color:var(--ink4);font-size:11px">\u2014</span>';
+    const minTempHtml = a.atleta_id ? (a.minutosTotais || 0) + 'min' : '<span style="color:#f59e0b;font-weight:600">\u26a0</span>';
+    const dispHtml   = a._disponibilidade ? '<span class="disp-badge ' + (a._disponibilidade.cls||'disp-ok') + '">' + (a._disponibilidade.status||'Dispon\u00edvel') + '</span>' : '<span class="disp-badge disp-ok">Dispon\u00edvel</span>';
     return '<tr class="' + rowClass + ' row-link" onclick="abrirFicha(' + JSON.stringify(a.nome) + ')" title="Ver ficha de ' + a.nome + '">' +
       '<td><span class="pos-badge">' + a.posicao + '</span></td>' +
       '<td><span class="name-cell name-link">' + a.nome + '</span></td>' +
-      '<td><div class="score-cell"><div class="score-gauge">' +
-        '<svg viewBox="0 0 38 38"><circle class="gauge-bg" cx="19" cy="19" r="' + R + '"/>' +
-        '<circle class="gauge-fill" cx="19" cy="19" r="' + R + '" stroke="' + gaugeColor + '" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + dashOffset + '"/></svg>' +
-        '<div class="gauge-num ' + scoreClass + '">' + a.score + '</div>' +
-      '</div></div></td>' +
-      '<td><div class="classe-indicator ' + ciClass + '"><div class="ci-dot"></div><span class="ci-label">' + a.classe + '</span></div></td>' +
+      '<td><div class="score-cell"><span class="score-num ' + scoreClass + '">' + a.score + '</span>' +
+        '<div class="score-bar-bg"><div class="score-bar-fill" style="width:' + a.score + '%;background:' + barColor + '"></div></div>' +
+      '</div></td>' +
+      '<td><span class="badge ' + badgeClass + '">' + a.classe + '</span></td>' +
       '<td><span class="nsp-badge ' + nspClass + '">' + a.statusLabel + '</span></td>' +
       '<td><span class="qt-val ' + qtClass + '">' + qtDisplay + '</span></td>' +
       '<td><span class="' + ratioClass + '">' + a.ratio.toFixed(2) + '\u00D7</span></td>' +
       '<td><span class="mono-val">' + a.min7d + "'" + '</span></td>' +
       '<td><span class="mono-val">' + a.min21d + "'" + '</span></td>' +
+      '<td style="text-align:center;white-space:nowrap"><span class="mono-val">' + minTempHtml + '</span></td>' +
       '<td>' + dorHtml + '</td>' +
       '<td><div class="alerts-cell">' + alertsHtml + '</div></td>' +
-      '<td>' + (a._disponibilidade ? '<span class="disp-badge ' + (a._disponibilidade.cls||'disp-ok') + '">' + (a._disponibilidade.status||'Dispon\u00edvel') + '</span>' : '<span class="disp-badge disp-ok">Dispon\u00edvel</span>') + '</td>' +
+      '<td>' + dispHtml + '</td>' +
       '<td><span class="' + decClass + '">' + a.decisao + '</span></td>' +
     '</tr>';
   }).join('');
