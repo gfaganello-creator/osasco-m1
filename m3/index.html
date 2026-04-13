@@ -529,14 +529,20 @@ function a3ParseCSV(txt) {
     r.push(c.replace(/^"|"$/g,'').trim());
     return r;
   }
-  function normHeader(h) {
-    var clean = (h||'').replace(/[^\x00-\x7F]/g,' ').replace(/\s+/g,' ').trim();
-    var tokens = clean.split(' ');
-    for (var i=0; i<tokens.length; i++) {
-      if (/^[a-z][a-z0-9_]*$/.test(tokens[i]) && tokens[i].length > 1) return tokens[i];
-    }
-    var fb = clean.match(/^([a-zA-Z][a-zA-Z0-9_]*)/);
-    return fb ? fb[1].toLowerCase() : '';
+  function normHeader(raw){
+    var s = String(raw || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    var snakeMatches = s.match(/\b[a-z]+(?:_[a-z0-9]+)+\b/g) || [];
+    var blacklist = {aba:1,protegida:1,protegido:1,sheet:1,protected:1,nao:1,editar:1,manualmente:1,gerenciada:1,automaticamente:1,pelo:1,script:1,sincronizacao:1};
+    snakeMatches = snakeMatches.filter(function(x){ return !blacklist[x]; });
+    if (snakeMatches.length) return snakeMatches[0];
+    var simpleMatches = s.match(/\b[a-z][a-z0-9]*\b/g) || [];
+    simpleMatches = simpleMatches.filter(function(x){ return !blacklist[x]; });
+    return simpleMatches[0] || '';
   }
   var hs = splitLine(ls[0]).map(normHeader);
   return ls.slice(1).map(function(l){
