@@ -796,6 +796,10 @@ table.m5tbl tbody tr.row-diverge td:nth-child(2)::after{content:'';}
 // M6 — PÓS-JOGO  |  Osasco Sporting High Performance Platform
 // ══════════════════════════════════════════════════════════════════
 
+// ── Config A3 ───────────────────────────────────────────────────
+var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
+var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
+
 // ── Estado ──────────────────────────────────────────────────────
 var jogo = {
   adversario: 'Advers\u00e1rio',
@@ -805,6 +809,9 @@ var jogo = {
   golsContra:  0,
   resultado:   null  // 'v'|'e'|'d'
 };
+
+// Estado A3
+var _a3PartidaAtiva = null;  // row da partida carregada do A3
 
 // atletas importados do M5 / escalação
 var elenco = [];       // [{nome, posicao, grupo:'titular'|'banco'|'fora', score}]
@@ -844,43 +851,178 @@ function normalizarNome(s) {
   return s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
 }
 
-// ── Importar escalação do localStorage (M5 salva) ou NSP ────────
-function importarEscalacaoM5() {
-  // M5 não persiste em localStorage, mas podemos carregar o Cadastro NSP
-  // e deixar o usuário definir quem jogou. O link entre M5 e M6 é via
-  // dados da planilha NSP (Cadastro).
-  var NSP_SID = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
-  var url = 'https://docs.google.com/spreadsheets/d/' + NSP_SID +
-            '/gviz/tq?tqx=out:csv&sheet=Cadastro';
-  setSyncState('loading', 'Carregando elenco\u2026');
+// ── Helpers A3 ──────────────────────────────────────────────────
+function a3ParseCSV_M6(txt){
+  if(!txt||!txt.trim()) return [];
+  var linhas = txt.split(/\r?\n/);
+  var hdr = linhas[0].split(',').map(function(h){ return h.replace(/^"|"$/g,'').trim(); });
+  var out = [];
+  for(var i=1;i<linhas.length;i++){
+    var cols=[], cur='', inQ=false;
+    for(var c=0;c<linhas[i].length;c++){
+      var ch=linhas[i][c];
+      if(ch==='"'){ inQ=!inQ; }
+      else if(ch===','&&!inQ){ cols.push(cur); cur=''; }
+      else cur+=ch;
+    }
+    cols.push(cur);
+    var row={};
+    hdr.forEach(function(h,idx){ row[h]=(cols[idx]||'').replace(/^"|"$/g,'').trim(); });
+    out.push(row);
+  }
+  return out;
+}
 
-  fetch(url)
-    .then(function(r) { return r.ok ? r.text() : ''; })
-    .then(function(txt) {
-      var rows = parseCSV(txt).filter(function(r) { return r['Nome'] && r['Nome'].trim(); });
-      if (!rows.length) throw new Error('Cadastro vazio');
-      elenco = rows.map(function(r) {
-        return {
-          nome:     r['Nome'].trim(),
-          posicao:  r['Posi\u00e7\u00e3o'] || r['Posicao'] || '\u2014',
-          grupo:    'elenco',
-          score:    0
-        };
-      }).sort(function(a, b) { return a.nome.localeCompare(b.nome, 'pt'); });
-      // Init utilização
-      elenco.forEach(function(a) {
-        utilizacao[a.nome] = { jogou: false, titular: false, minutos: 0, entrou: false, saiu: false, obs: '' };
-      });
-      setSyncState('ok', elenco.length + ' atletas \u00b7 ' +
-        new Date().toLocaleDateString('pt-BR'));
-      renderTabela();
-      console.log('[M6] Elenco carregado:', elenco.length);
-    })
-    .catch(function(err) {
-      console.error('[M6]', err);
-      setSyncState('error', 'Planilha indispon\u00edvel');
-      renderTabelaVazia();
+async function a3FetchAba_M6(aba){
+  try{
+    var r = await fetch(A3_BASE + encodeURIComponent(aba));
+    if(!r.ok) return '';
+    return r.text();
+  }catch(e){ return ''; }
+}
+
+// Seleciona partida mais recente passada (para pós-jogo)
+function a3SelecionarPartidaRecente(partidas){
+  if(!partidas||!partidas.length) return null;
+  var hoje = new Date();
+  var passadas = [];
+  partidas.forEach(function(p){
+    if(!p['data']||!p['data'].trim()){ passadas.push({p:p,d:new Date(0)}); return; }
+    try{
+      var partes = p['data'].split('/');
+      var d = partes.length===3 ? new Date(partes[2]+'-'+partes[1]+'-'+partes[0]) : new Date(p['data']);
+      if(d<=hoje) passadas.push({p:p,d:d});
+    }catch(e){ passadas.push({p:p,d:new Date(0)}); }
+  });
+  if(passadas.length) return passadas.sort(function(a,b){return b.d-a.d;})[0].p;
+  return partidas[0]; // fallback: primeira disponível
+}
+
+// ── Importar escalação do A3 ─────────────────────────────────────
+function importarEscalacaoM5() {
+  var NSP_SID_LOCAL = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
+  setSyncState('loading', 'Carregando elenco e jogo\u2026');
+
+  Promise.all([
+    // VOLT — Cadastro para base do elenco
+    fetch('https://docs.google.com/spreadsheets/d/' + NSP_SID_LOCAL + '/gviz/tq?tqx=out:csv&sheet=Cadastro')
+      .then(function(r){ return r.ok?r.text():''; }).catch(function(){ return ''; }),
+    // A3 — Partidas
+    a3FetchAba_M6('Partidas'),
+    // A3 — Relacionados
+    a3FetchAba_M6('Relacionados'),
+    // A3 — Pos_Jogo
+    a3FetchAba_M6('Pos_Jogo'),
+    // A3 — Mapeamento
+    a3FetchAba_M6('Mapeamento')
+  ]).then(function(resultados){
+    var txtCadastro  = resultados[0];
+    var txtPartidas  = resultados[1];
+    var txtRelac     = resultados[2];
+    var txtPosJogo   = resultados[3];
+    var txtMapea     = resultados[4];
+
+    // Logs diagnóstico
+    var a3Partidas  = a3ParseCSV_M6(txtPartidas);
+    var a3Relac     = a3ParseCSV_M6(txtRelac);
+    var a3PosJogo   = a3ParseCSV_M6(txtPosJogo);
+    var a3Mapea     = a3ParseCSV_M6(txtMapea);
+
+    console.log('[M6/Partidas] linhas brutas:', a3Partidas.length);
+    console.log('[M6/Relacionados] linhas brutas:', a3Relac.length);
+
+    // Selecionar partida recente (pós-jogo = passada mais recente)
+    _a3PartidaAtiva = a3SelecionarPartidaRecente(a3Partidas);
+    console.log('[M6] partida selecionada:', _a3PartidaAtiva ? JSON.stringify(_a3PartidaAtiva) : 'null');
+
+    // Atualizar objeto jogo com dados reais
+    if(_a3PartidaAtiva){
+      jogo.adversario = _a3PartidaAtiva['adversario']||_a3PartidaAtiva['opponent']||jogo.adversario;
+      jogo.data       = _a3PartidaAtiva['data']||jogo.data;
+      jogo.competicao = _a3PartidaAtiva['competicao']||_a3PartidaAtiva['competition']||jogo.competicao;
+      var gp = parseInt(_a3PartidaAtiva['gols_pro']||_a3PartidaAtiva['gols_casa']||0);
+      var gc = parseInt(_a3PartidaAtiva['gols_contra']||_a3PartidaAtiva['gols_visitante']||0);
+      if(!isNaN(gp)) jogo.golsPro     = gp;
+      if(!isNaN(gc)) jogo.golsContra  = gc;
+      if(gp>gc) jogo.resultado='v'; else if(gp===gc) jogo.resultado='e'; else jogo.resultado='d';
+    }
+    renderJogoHeader();
+
+    // id da partida selecionada
+    var partida_id = _a3PartidaAtiva ? (_a3PartidaAtiva['partida_id']||_a3PartidaAtiva['id']||'') : '';
+
+    // Mapeamento atleta_id → nome_nsp
+    var idParaNome = {};
+    a3Mapea.forEach(function(r){ if(r['atleta_id']&&r['nome_nsp']) idParaNome[r['atleta_id'].trim()]=r['nome_nsp'].trim(); });
+
+    // Base do elenco vem do VOLT/Cadastro
+    var voltRows = a3ParseCSV_M6(txtCadastro||'').filter(function(r){return r['Nome']&&r['Nome'].trim();});
+    if(!voltRows.length){
+      // fallback: tentar parseCSV padrão
+      voltRows = parseCSV(txtCadastro||'').filter(function(r){return r['Nome']&&r['Nome'].trim();});
+    }
+
+    console.log('[M6] atletas carregados para o jogo:', voltRows.length);
+
+    elenco = voltRows.map(function(r){
+      return {
+        nome:    r['Nome'].trim(),
+        posicao: r['Posi\u00e7\u00e3o']||r['Posicao']||'\u2014',
+        grupo:   'elenco',
+        score:   0
+      };
+    }).sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt'); });
+
+    // Init utilização em branco
+    elenco.forEach(function(a){
+      utilizacao[a.nome] = { jogou:false, titular:false, minutos:0, entrou:false, saiu:false, obs:'' };
     });
+
+    // Pré-preencher utilização a partir de Pos_Jogo (se já existe registro da partida)
+    var posJogoPartida = a3PosJogo.filter(function(r){
+      return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+    });
+    posJogoPartida.forEach(function(r){
+      var aid = (r['atleta_id']||'').trim();
+      var nomev = idParaNome[aid];
+      if(!nomev) nomev = (r['nome_atleta']||'').trim();
+      if(!nomev) return;
+      // Encontrar no elenco (VOLT)
+      var found = elenco.find(function(a){ return normalizarNome(a.nome)===normalizarNome(nomev); });
+      if(!found) return;
+      var u = utilizacao[found.nome];
+      u.jogou    = (r['jogou']||'').trim().toUpperCase()==='S';
+      u.titular  = (r['titular']||'').trim().toUpperCase()==='S';
+      u.minutos  = parseInt(r['minutos']||0)||0;
+      u.obs      = r['observacoes']||r['obs']||'';
+    });
+
+    // Pré-preencher a partir de Relacionados (fallback)
+    if(!posJogoPartida.length){
+      var relPartida = a3Relac.filter(function(r){
+        return !partida_id || (r['partida_id']||'').trim()===partida_id.trim();
+      });
+      relPartida.forEach(function(r){
+        var aid = (r['atleta_id']||'').trim();
+        var nomev = idParaNome[aid]||(r['nome_atleta']||'').trim();
+        if(!nomev) return;
+        var found = elenco.find(function(a){ return normalizarNome(a.nome)===normalizarNome(nomev); });
+        if(!found) return;
+        var u = utilizacao[found.nome];
+        u.jogou   = (r['jogou']||'').trim().toUpperCase()==='S' || true; // relacionado = jogou
+        u.titular = (r['titular']||'').trim().toUpperCase()==='S';
+        u.minutos = parseInt(r['minutos']||0)||0;
+      });
+    }
+
+    setSyncState('ok', elenco.length + ' atletas \u00b7 ' + new Date().toLocaleDateString('pt-BR'));
+    renderTabela();
+    atualizarKPIs();
+  }).catch(function(err){
+    console.error('[M6]', err);
+    setSyncState('error', 'Planilha indispon\u00edvel');
+    renderTabelaVazia();
+  });
 }
 
 // ── Sync state ──────────────────────────────────────────────────
