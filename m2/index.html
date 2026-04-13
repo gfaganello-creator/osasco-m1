@@ -872,26 +872,42 @@ async function iniciarM2() {
 
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
+    // Usar A3 como base do select quando disponível (já carregado acima)
+    // value = atleta_id para joins diretos; fallback para nome se não mapeado
     var sorted = NSP_DATA.cadastro.slice().sort(function(a, b) {
       return a['Nome'].localeCompare(b['Nome'], 'pt');
     });
     sorted.forEach(function(r) {
+      var nomeNorm = a3NormalizeNome(r['Nome']);
+      var id = _a3NspIndex[nomeNorm] || null;
       var o = document.createElement('option');
-      o.value = r['Nome'];
+      o.value    = id || r['Nome'];           // atleta_id preferencial, nome como fallback
+      o.dataset.nome = r['Nome'];             // nome sempre acessível para VOLT
+      o.dataset.atletaId = id || '';
       o.textContent = r['Nome'] + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
       sel.appendChild(o);
     });
 
     var params = new URLSearchParams(window.location.search);
-    var nome = params.get('atleta') || params.get('nome');
-    // Patch 3: atleta_id pode vir direto da URL (M1 → M2)
     var atletaIdFromUrl = params.get('atleta_id') || null;
-    if (atletaIdFromUrl && _a3PorId[atletaIdFromUrl]) {
-      // garante que o select mostra o nome correto
-      var a3Row = _a3PorId[atletaIdFromUrl];
-      nome = nome || a3Row.nome_nsp || nome;
+    var nomeFromUrl     = params.get('atleta') || params.get('nome') || null;
+
+    if (atletaIdFromUrl) {
+      // Tentar selecionar pela option cujo value = atleta_id
+      sel.value = atletaIdFromUrl;
+      // Se não encontrou (value era nome), tentar pelo dataset
+      if (!sel.value || sel.value !== atletaIdFromUrl) {
+        var opts = sel.querySelectorAll('option');
+        for (var i=0; i<opts.length; i++) {
+          if (opts[i].dataset.atletaId === atletaIdFromUrl) {
+            sel.value = opts[i].value; break;
+          }
+        }
+      }
+    } else if (nomeFromUrl) {
+      sel.value = nomeFromUrl;
     }
-    if (nome) { sel.value = nome; carregarAtleta(); }
+    if (sel.value) { carregarAtleta(); }
 
   } catch(err) {
     console.error('[M2] Erro ao carregar:', err.message);
@@ -965,20 +981,39 @@ function buildA3Panels(atletaId, posLabel, posCodigo, minutos, obsArr, plano) {
 }
 // ── Fim buildA3Panels ─────────────────────────────────────────────
 function carregarAtleta() {
-  var nome = document.getElementById('athlete-select').value;
-  if (!nome||!NSP_DATA) {
+  var sel  = document.getElementById('athlete-select');
+  var val  = sel ? sel.value : '';
+  var selOpt = sel ? sel.options[sel.selectedIndex] : null;
+  // nome sempre vem do dataset (exibição + joins VOLT)
+  var nome    = (selOpt && selOpt.dataset.nome) ? selOpt.dataset.nome : val;
+  // atleta_id vem do dataset se disponível, senão o value é o atleta_id
+  var atletaId = (selOpt && selOpt.dataset.atletaId) ? selOpt.dataset.atletaId : null;
+  // se o value parece um ID (não contém espaço, não é vazio), usar como atleta_id
+  if (!atletaId && val && !val.includes(' ') && val !== '') atletaId = val;
+
+  if (!val || !NSP_DATA) {
     document.getElementById('m2-content').innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="state-title">Selecione um atleta</div></div>';
     return;
   }
+
+  // Toque 4 — atualizar URL com atleta_id
+  if (atletaId && history.replaceState) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('atleta_id', atletaId);
+    if (nome) url.searchParams.set('nome', nome);
+    url.searchParams.delete('atleta');
+    history.replaceState(null, '', url.toString());
+  }
+
   try {
     var cad = NSP_DATA.cadastro.find(function(r){return r['Nome']===nome;})||{};
     var map = NSP_DATA.mapeamento.find(function(r){return r['nome_nsp']===nome;})||{};
     var sc  = calcScore(nome, NSP_DATA.recuperacao, NSP_DATA.preTreino, NSP_DATA.carga);
 
-    // ── PATCH 3: resolver atleta_id (URL → índice normalizado) ────
-    var atletaIdUrl = (new URLSearchParams(window.location.search)).get('atleta_id')||null;
-    var nomeNormalizado = a3NormalizeNome(nome);
-    var atletaId = atletaIdUrl || _a3NspIndex[nomeNormalizado] || null;
+    // atleta_id: do select → fallback normalização
+    if (!atletaId) {
+      atletaId = _a3NspIndex[a3NormalizeNome(nome)] || null;
+    }
     if (!atletaId) console.warn('[M2] NÃO MAPEADO:', nome);
 
     // ── PATCH 5: posição oficial do Mapeamento A3 ─────────────────
