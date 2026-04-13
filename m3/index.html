@@ -748,29 +748,36 @@ async function iniciarM3(){
     // ── PATCH 3: base do elenco = Mapeamento A3 ───────────────────
     // Fallback: se A3 falhar ou estiver vazio, usa cadastro VOLT
 
-    // Índice VOLT por nome normalizado (join rápido e robusto)
+    // Índice VOLT com múltiplas chaves por atleta:
+    // "andrey" → r  (nome curto = chave primária do VOLT)
+    // "andrey ventura" → r  (nome completo, se existir)
     var _voltIndex = {};
     cadastro.forEach(function(r){
-      var n = a3NormalizeNome(r['Nome']);
-      if (n) _voltIndex[n] = r;
+      var nCurto    = a3NormalizeNome(r['Nome']          || '');
+      var nCompleto = a3NormalizeNome(r['Nome Completo'] || '');
+      if (nCurto)    _voltIndex[nCurto]    = r;
+      if (nCompleto) _voltIndex[nCompleto] = r;
     });
 
     var baseElenco;
     if (window._a3Ativos.length > 0) {
-      var semVolt = [];  // T4: coletar misses em array, logar uma vez no final
+      var semVolt = [];
 
       baseElenco = window._a3Ativos.map(function(a){
-        // T3: chave de join priorizada — nome_volt > nome_nsp > nome_atleta
-        // Futuro: quando VOLT tiver atleta_id → _voltIndexById[a.atleta_id]
-        var nomeRefVolt = a.nome_volt || a.nome_nsp || a.nome_atleta || '';
-        var nomeNorm    = a3NormalizeNome(nomeRefVolt);
-        var volt        = _voltIndex[nomeNorm] || null;
+        // Tentar em ordem: nome_nsp completo → primeiro token do nome_nsp
+        // (ex: "Andrey Ventura" → tenta "andrey ventura", depois "andrey")
+        var ref      = a.nome_nsp || a.nome_atleta || '';
+        var refNorm  = a3NormalizeNome(ref);
+        var primeiro = refNorm.split(' ')[0];
 
-        // T4: acumular misses silenciosamente
-        if (!volt) semVolt.push(nomeRefVolt + ' (' + (a.atleta_id||'sem_id') + ')');
+        var volt = _voltIndex[refNorm]   // "andrey ventura" → match se VOLT tem Nome Completo
+                || _voltIndex[primeiro]  // "andrey" → match pelo nome curto do VOLT
+                || null;
+
+        if (!volt) semVolt.push(ref + ' (' + (a.atleta_id||'?') + ')');
 
         return {
-          nome:         volt ? volt['Nome'] : nomeRefVolt,
+          nome:         volt ? volt['Nome'] : ref,
           atleta_id:    a.atleta_id,
           posicao:      a.posicao_codigo || a.posicao_label || a.posicao_principal || '\u2014',
           volt:         volt || null,
@@ -778,11 +785,10 @@ async function iniciarM3(){
         };
       });
 
-      // T4: log único consolidado — sem spam por atleta
       if (semVolt.length) {
-        console.warn('[M3] Atletas sem VOLT (' + semVolt.length + '/' + window._a3Ativos.length + '):', semVolt.join(', '));
+        console.warn('[M3] Sem VOLT (' + semVolt.length + '/' + window._a3Ativos.length + '):', semVolt.join(', '));
       } else {
-        console.log('[M3] Join A3 \u2194 VOLT: 100% \u2014 todos os atletas encontrados.');
+        console.log('[M3] Join A3 \u2194 VOLT: 100%');
       }
 
     } else {
