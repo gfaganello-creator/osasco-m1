@@ -483,74 +483,71 @@ function buildResumoColetivo(atletas){
 // ═══════════════════════════════════════════════════════════════════
 var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
-var CARTOES_MOCK = [];
-
-// ════════════════════════════════════════════════════════════════════
-// ARQUIVO 3 v6 — CONFIGURAÇÃO CENTRAL (P0)
-// ════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// ARQUIVO 3 — leitura do Mapeamento para cartões e status clínico
+// ═════════════════════════════════════════════════════════════════
 var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
 var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
 
-window.APP_CONTEXT = { temporada: '2026', ativosApenas: true };
-
-function a3NormalizeNome(n) {
-  return (n||'')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\./g,'')
-    .replace(/[^a-z\s]/g,'')
-    .replace(/\s+/g,' ')
-    .trim();
-}
-
-async function a3Fetch(aba) {
-  try {
-    var r = await fetch(A3_BASE + encodeURIComponent(aba));
-    if (!r.ok) throw new Error(r.status);
-    return a3ParseCSV(await r.text());
-  } catch(e) {
-    console.warn('[A3] erro:', aba, e.message);
-    return [];
-  }
-}
-
-function a3ParseCSV(txt) {
+function a3CSV(txt) {
   if (!txt || !txt.trim()) return [];
-  var ls = txt.split('\n').filter(function(l){ return l.trim(); });
-  if (ls.length < 2) return [];
-  function splitLine(line) {
-    var r=[], c='', q=false;
-    for (var i=0; i<line.length; i++) {
-      var ch=line[i];
-      if (ch==='"') { q=!q; }
-      else if (ch===','&&!q) { r.push(c.replace(/^"|"$/g,'').trim()); c=''; }
-      else { c+=ch; }
+  var linhas = txt.split(/\r?\n/);
+  var hdr = linhas[0].split(',').map(function(h) { return h.replace(/^"|"$/g,'').trim(); });
+  var out = [];
+  for (var i = 1; i < linhas.length; i++) {
+    var cols = [], cur = '', inQ = false;
+    for (var c = 0; c < linhas[i].length; c++) {
+      var ch = linhas[i][c];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else cur += ch;
     }
-    r.push(c.replace(/^"|"$/g,'').trim());
-    return r;
+    cols.push(cur);
+    var row = {};
+    hdr.forEach(function(h, idx) { row[h] = (cols[idx] || '').replace(/^"|"$/g, '').trim(); });
+    out.push(row);
   }
-  function normHeader(raw){
-    var s = String(raw || '')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-    var snakeMatches = s.match(/\b[a-z]+(?:_[a-z0-9]+)+\b/g) || [];
-    var blacklist = {aba:1,protegida:1,protegido:1,sheet:1,protected:1,nao:1,editar:1,manualmente:1,gerenciada:1,automaticamente:1,pelo:1,script:1,sincronizacao:1};
-    snakeMatches = snakeMatches.filter(function(x){ return !blacklist[x]; });
-    if (snakeMatches.length) return snakeMatches[0];
-    var simpleMatches = s.match(/\b[a-z][a-z0-9]*\b/g) || [];
-    simpleMatches = simpleMatches.filter(function(x){ return !blacklist[x]; });
-    return simpleMatches[0] || '';
-  }
-  var hs = splitLine(ls[0]).map(normHeader);
-  return ls.slice(1).map(function(l){
-    var vs=splitLine(l), o={};
-    hs.forEach(function(h,i){ if(h) o[h]=(vs[i]||'').trim(); });
-    return o;
-  });}
-// ── Fim Arquivo 3 v6 ─────────────────────────────────────────────
+  return out;
+}
+
+async function a3FetchMapeamento() {
+  var url = A3_BASE + encodeURIComponent('Mapeamento');
+  console.log('[A3] fetch URL:', url.slice(0,100));
+  try {
+    var r = await fetch(url);
+    if (!r.ok) {
+      console.error('[A3] HTTP', r.status, r.statusText, '— planilha pública?');
+      return [];
+    }
+    var txt = await r.text();
+    if (!txt || txt.trim().length < 10) {
+      console.error('[A3] Resposta vazia — aba Mapeamento existe?');
+      return [];
+    }
+    var rows = a3CSV(txt);
+    console.log('[A3] Mapeamento:', rows.length, 'linhas recebidas');
+    if (rows.length > 0) console.log('[A3] Headers:', Object.keys(rows[0]).slice(0,8).join(', '));
+    if (rows.length > 0) console.log('[A3] 1 registro:', JSON.stringify(rows[0]).slice(0,200));
+    return rows;
+  } catch(e) { console.error('[A3] fetch falhou:', e.message); return []; }
+}
+
+function a3MapearCartoes(mapeamentoA3) {
+  return (mapeamentoA3 || []).map(function(r) {
+    var nome = (r['nome_nsp'] || r['nome_atleta'] || r['nome_volt'] || r['nome'] || '').trim();
+    if (!nome) return null;
+    var amars = parseInt(r['cartoes_amarelos'] || r['cartao_amarelo'] || r['amarelos'] || 0) || 0;
+    var verms = parseInt(r['cartoes_vermelhos'] || r['cartao_vermelho'] || r['vermelhos'] || 0) || 0;
+    var statusClin = (r['status_clinico'] || r['status_ativo'] || r['status'] || '').toLowerCase();
+    var decisao    = (r['decisao_comissao'] || r['decisao'] || '').toLowerCase();
+    var suspenso   = statusClin.includes('suspenso') || statusClin.includes('suspen')
+                  || decisao.includes('suspens') || verms > 0;
+    var pendurado  = !suspenso && amars >= 2;
+    return { nome: nome, amarelos: amars, vermelhos: verms, suspenso: suspenso, pendurado: pendurado };
+  }).filter(Boolean);
+}
+
+var CARTOES_MOCK = [];
 
 var dadosM3 = [];
 
@@ -583,17 +580,6 @@ function parseCSV(txt){
     }
   });
   return rows;
-}
-
-// ── Arquivo 3 v6: carga semanal por atleta (Treinos_Semana) ──────
-function a3CargaSemana(atletaId) {
-  var arr = (window._a3TreinosPorAtleta || {})[atletaId] || [];
-  var total = 0;
-  arr.forEach(function(t){
-    var c = Number(t.carga_subjetiva);
-    if (!isNaN(c)) total += c;
-  });
-  return total;
 }
 
 // \u2500\u2500 Build athlete list from NSP cadastro \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -714,165 +700,17 @@ async function iniciarM3(){
     var get = function(i){ return results[i].status === 'fulfilled' ? results[i].value : ''; };
     var cadastro = parseCSV(get(0)).filter(function(r){ return r['Nome'] && r['Nome'].trim(); });
     var epiRows  = parseCSV(get(1));
-    var cartoes  = CARTOES_MOCK;
-
-    // ── PATCH 1: Mapeamento A3 (base do elenco) ───────────────────
-    var a3Mapeamento = await a3Fetch('Mapeamento');
-    window._a3Ativos = a3Mapeamento.filter(function(r){
-      return (r.status_ativo||'').toLowerCase() === 'ativo';
-    });
-    window._a3PorId    = {};
-    window._a3NspIndex = {};
-    window._a3Ativos.forEach(function(r){
-      if (!r.atleta_id) return;
-      window._a3PorId[r.atleta_id] = r;
-      if (r.nome_nsp) window._a3NspIndex[a3NormalizeNome(r.nome_nsp)] = r.atleta_id;
-    });
-    console.log('[M3/A3] Mapeamento ativos:', window._a3Ativos.length,
-                '| nspIndex:', Object.keys(window._a3NspIndex).length);
-
-    // ── PATCH 2: Treinos_Semana ───────────────────────────────────
-    var a3Treinos = await a3Fetch('Treinos_Semana');
-    var treinosFiltrados = a3Treinos.filter(function(r){
-      return !r.temporada || r.temporada === window.APP_CONTEXT.temporada;
-    });
-    window._a3TreinosPorAtleta = {};
-    treinosFiltrados.forEach(function(r){
-      var id = r.atleta_id;
-      if (!id) return;
-      if (!window._a3TreinosPorAtleta[id]) window._a3TreinosPorAtleta[id] = [];
-      window._a3TreinosPorAtleta[id].push(r);
-    });
-    console.log('[M3/A3] Treinos_Semana filtrados:', treinosFiltrados.length);
-
-    // ── BASE DO ELENCO = VOLT (fonte oficial) ─────────────────────
-    // A3 enriquece com atleta_id, posição oficial e carga semanal
-    // Índice A3 por nome_nsp normalizado → para enriquecer atletas do VOLT
-
-    // Índice VOLT por Nome e Nome Completo normalizados (para fuzzy interno)
-    var _voltIndex = {};
-    var _voltTokenCount = {};
-    var _voltLista = [];
-    cadastro.forEach(function(r){
-      var nCurto    = a3NormalizeNome(r['Nome']          || '');
-      var nCompleto = a3NormalizeNome(r['Nome Completo'] || '');
-      if (nCurto)    _voltIndex[nCurto]    = r;
-      if (nCompleto) _voltIndex[nCompleto] = r;
-      var tok = nCurto.split(' ')[0];
-      if (tok) _voltTokenCount[tok] = (_voltTokenCount[tok] || 0) + 1;
-      _voltLista.push({ r: r, tokens: nCurto.split(' ') });
-    });
-
-    // Levenshtein para match fuzzy A3→VOLT (Bryan/Brayan)
-    function levenshtein(a, b) {
-      if (a === b) return 0;
-      if (!a) return b.length;
-      if (!b) return a.length;
-      var m = a.length, n = b.length, i, j;
-      var dp = [];
-      for (i = 0; i <= m; i++) { dp[i] = [i]; }
-      for (j = 0; j <= n; j++) { dp[0][j] = j; }
-      for (i = 1; i <= m; i++) {
-        for (j = 1; j <= n; j++) {
-          dp[i][j] = a[i-1] === b[j-1]
-            ? dp[i-1][j-1]
-            : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-        }
-      }
-      return dp[m][n];
+    // ── A3: buscar Mapeamento para cartões ──────────────────────────
+    var mapeamentoA3M3 = await a3FetchMapeamento();
+    var cartoes = a3MapearCartoes(mapeamentoA3M3);
+    if (!cartoes.length) {
+      console.warn('[M3/A3] Mapeamento vazio — usando CARTOES_MOCK');
+      cartoes = CARTOES_MOCK;
+    } else {
+      console.log('[M3/A3] Mapeamento ativos:', cartoes.length);
     }
 
-    // Índice A3 por múltiplas chaves → encontrar atleta_id para cada atleta do VOLT
-    // Chaves: nome_volt, nome_nsp, nome_atleta (e tokens)
-    var _a3IndexPorNome = {};
-    (window._a3Ativos || []).forEach(function(a){
-      var chaves = [
-        a3NormalizeNome(a.nome_volt   || ''),
-        a3NormalizeNome(a.nome_nsp    || ''),
-        a3NormalizeNome(a.nome_atleta || ''),
-      ];
-      chaves.forEach(function(ch){
-        if (ch && !_a3IndexPorNome[ch]) _a3IndexPorNome[ch] = a;
-      });
-    });
-
-    // Buscar registro A3 para um atleta do VOLT (nome curto + fuzzy)
-    function buscarA3(nomeVolt, nomeCompletoVolt) {
-      var n1 = a3NormalizeNome(nomeVolt || '');
-      var n2 = a3NormalizeNome(nomeCompletoVolt || '');
-      // Direto por nome curto ou completo
-      if (_a3IndexPorNome[n1]) return _a3IndexPorNome[n1];
-      if (_a3IndexPorNome[n2]) return _a3IndexPorNome[n2];
-      // Fuzzy dist==1 em tokens longos (Brayan/Bryan)
-      var toks = n1.split(' ');
-      var melhor = null, melhorDist = 99, ambiguo = false;
-      Object.keys(_a3IndexPorNome).forEach(function(ch){
-        ch.split(' ').forEach(function(tc){
-          if (tc.length < 5) return;
-          toks.forEach(function(ta){
-            if (ta.length < 5) return;
-            var d = levenshtein(ta, tc);
-            if (d === 1) {
-              if (d < melhorDist) { melhorDist=d; melhor=_a3IndexPorNome[ch]; ambiguo=false; }
-              else if (d===melhorDist && melhor && melhor.atleta_id !== _a3IndexPorNome[ch].atleta_id) { ambiguo=true; }
-            }
-          });
-        });
-      });
-      return ambiguo ? null : melhor;
-    }
-
-    var baseElenco;
-    var semA3 = [];    // atletas VOLT sem registro A3
-    var grafiasDif = []; // matches fuzzy
-
-    // BASE = VOLT — sempre 39 atletas (ou o que estiver no VOLT)
-    baseElenco = cadastro.map(function(r){
-      var nomeVolt = r['Nome'] || '';
-      var a3 = buscarA3(nomeVolt, r['Nome Completo']);
-
-      if (!a3) {
-        semA3.push(nomeVolt);
-      } else if (a3NormalizeNome(a3.nome_nsp||a3.nome_atleta||'') !== a3NormalizeNome(nomeVolt)) {
-        grafiasDif.push('"' + nomeVolt + '" \u2194 A3:"' + (a3.nome_nsp||a3.nome_atleta) + '"');
-      }
-
-      var posicao = (a3 && (a3.posicao_codigo || a3.posicao_label || a3.posicao_principal))
-        || r['Posi\u00e7\u00e3o'] || '\u2014';
-
-      return {
-        nome:         nomeVolt,                        // VOLT = fonte oficial do nome
-        atleta_id:    a3 ? a3.atleta_id : null,        // A3 = fonte do ID
-        posicao:      posicao,
-        volt:         r,                               // sempre tem VOLT
-        _cargaSemana: a3 ? a3CargaSemana(a3.atleta_id) : 0
-      };
-    });
-
-    var total = baseElenco.length;
-    console.log('[M3] Base: ' + total + ' atletas (VOLT)'
-      + (grafiasDif.length ? ' | grafia: ' + grafiasDif.length : '')
-      + (semA3.length      ? ' | sem A3: ' + semA3.length      : ''));
-    if (grafiasDif.length) console.info('[M3] Grafia:', grafiasDif.join(' | '));
-    if (semA3.length)      console.info('[M3] Sem A3 (sem atleta_id):', semA3.join(', '));
-
-    // buildAtletasM3 recebe a base enriquecida: passa nome como chave para clinical/disciplina
-    dadosM3 = baseElenco.map(function(a){
-      var clinical     = buildClinical(a.nome, epiRows);
-      var disciplina   = buildDisciplina(a.nome, cartoes);
-      var disponibilidade = calcDisponibilidade(clinical, disciplina);
-      return {
-        nome:            a.nome,
-        atleta_id:       a.atleta_id,
-        posicao:         a.posicao,
-        _cargaSemana:    a._cargaSemana,
-        _clinical:       clinical,
-        _disciplina:     disciplina,
-        _disponibilidade: disponibilidade
-      };
-    });
-    // ─────────────────────────────────────────────────────────────
-
+    dadosM3 = buildAtletasM3(cadastro, epiRows, cartoes);
     renderM3();
   } catch(err) {
     console.error('[M3]', err);
