@@ -456,17 +456,31 @@ const NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 const DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
 const EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
 // ═════════════════════════════════════════════════════════════════
-// ARQUIVO 3 — leitura do Mapeamento para cartões e status clínico
+// ARQUIVO 3 — integração completa (fix linha de proteção + temporada)
 // ═════════════════════════════════════════════════════════════════
 var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
 var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
 
 function a3CSV(txt) {
+  // Parse CSV pulando automaticamente linhas de aviso/proteção
   if (!txt || !txt.trim()) return [];
-  var linhas = txt.split(/\r?\n/);
-  var hdr = linhas[0].split(',').map(function(h) { return h.replace(/^"|"$/g,'').trim(); });
+  var linhas = txt.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (!linhas.length) return [];
+
+  // Detectar linha de headers: pular linhas de aviso (contêm PROTEGIDA, EDITAR, ⚠)
+  var hdrIdx = 0;
+  for (var i = 0; i < Math.min(linhas.length, 5); i++) {
+    var l = linhas[i];
+    if (l.indexOf('PROTEGIDA') >= 0 || l.indexOf('EDITAR MANUALMENTE') >= 0 || l.indexOf('\u26a0') >= 0) {
+      continue;
+    }
+    hdrIdx = i;
+    break;
+  }
+
+  var hdr = linhas[hdrIdx].split(',').map(function(h) { return h.replace(/^"|"$/g,'').trim(); });
   var out = [];
-  for (var i = 1; i < linhas.length; i++) {
+  for (var i = hdrIdx + 1; i < linhas.length; i++) {
     var cols = [], cur = '', inQ = false;
     for (var c = 0; c < linhas[i].length; c++) {
       var ch = linhas[i][c];
@@ -484,22 +498,14 @@ function a3CSV(txt) {
 
 async function a3FetchMapeamento() {
   var url = A3_BASE + encodeURIComponent('Mapeamento');
-  console.log('[A3] fetch URL:', url.slice(0,100));
+  console.log('[A3] fetch Mapeamento:', url.slice(0,90));
   try {
     var r = await fetch(url);
-    if (!r.ok) {
-      console.error('[A3] HTTP', r.status, r.statusText, '— planilha pública?');
-      return [];
-    }
-    var txt = await r.text();
-    if (!txt || txt.trim().length < 10) {
-      console.error('[A3] Resposta vazia — aba Mapeamento existe?');
-      return [];
-    }
-    var rows = a3CSV(txt);
-    console.log('[A3] Mapeamento:', rows.length, 'linhas recebidas');
-    if (rows.length > 0) console.log('[A3] Headers:', Object.keys(rows[0]).slice(0,8).join(', '));
-    if (rows.length > 0) console.log('[A3] 1 registro:', JSON.stringify(rows[0]).slice(0,200));
+    if (!r.ok) { console.error('[A3] HTTP', r.status, '— planilha pública?'); return []; }
+    var rows = a3CSV(await r.text());
+    console.log('[A3] Mapeamento:', rows.length, 'registros');
+    if (rows.length > 0) console.log('[A3] Headers reais:', Object.keys(rows[0]).slice(0,6).join(', '));
+    if (rows.length > 0) console.log('[A3] 1 nome_nsp:', rows[0]['nome_nsp'] || rows[0]['nome_atleta'] || '(vazio)');
     return rows;
   } catch(e) { console.error('[A3] fetch falhou:', e.message); return []; }
 }
@@ -518,6 +524,72 @@ function a3MapearCartoes(mapeamentoA3) {
     return { nome: nome, amarelos: amars, vermelhos: verms, suspenso: suspenso, pendurado: pendurado };
   }).filter(Boolean);
 }
+
+async function a3FetchDesempenhoPorAtleta(mapeamentoA3) {
+  // Lê Pos_Jogo + Partidas e retorna [{atleta_nome, data, minutos}] para o M1
+  var urlPJ = A3_BASE + encodeURIComponent('Pos_Jogo');
+  var urlPt = A3_BASE + encodeURIComponent('Partidas');
+  try {
+    var results = await Promise.all([
+      fetch(urlPJ).then(function(rr){ return rr.ok ? rr.text() : ''; }).catch(function(){ return ''; }),
+      fetch(urlPt).then(function(rr){ return rr.ok ? rr.text() : ''; }).catch(function(){ return ''; })
+    ]);
+    var posJogo  = a3CSV(results[0]);
+    var partidas = a3CSV(results[1]);
+
+    // Mapear partida_id → data (col1 do Partidas = data no formato DD/MM/YYYY)
+    var dataPartida = {};
+    partidas.forEach(function(p) {
+      var pid  = (p['partida_id'] || p['id'] || '').trim();
+      // Col1 pode ser 'temporada' (nome do header) mas valor = data DD/MM/YYYY
+      var data = '';
+      var keys = Object.keys(p);
+      if (keys.length > 1) {
+        var v1 = p[keys[1]] || '';
+        // Detectar se parece data DD/MM/YYYY
+        if (/\d{2}\/\d{2}\/\d{4}/.test(v1)) data = v1;
+        else data = p['data'] || p['data_jogo'] || v1;
+      }
+      if (pid && data) dataPartida[pid] = data;
+    });
+
+    console.log('[A3] Partidas:', partidas.length, '| datas mapeadas:', Object.keys(dataPartida).length);
+    if (partidas.length > 0) {
+      console.log('[A3] Partidas col0-3:', Object.keys(partidas[0]).slice(0,4).join(', '));
+      console.log('[A3] Partidas 1a linha:', JSON.stringify(partidas[0]).slice(0,120));
+    }
+
+    // Mapear atleta_id → nome_nsp
+    var idParaNome = {};
+    (mapeamentoA3 || []).forEach(function(r) {
+      var aid  = (r['atleta_id'] || '').trim();
+      var nome = (r['nome_nsp'] || r['nome_atleta'] || '').trim();
+      if (aid && nome) idParaNome[aid] = nome;
+    });
+
+    // Construir array de desempenho
+    var desempA3 = [];
+    posJogo.forEach(function(pj) {
+      var pid  = (pj['partida_id'] || '').trim();
+      var aid  = (pj['atleta_id'] || '').trim();
+      var nomePj = (pj['nome_atleta'] || '').trim();
+      var nomeVolt = idParaNome[aid] || nomePj;
+      if (!nomeVolt) return;
+      var min = parseInt(pj['minutos'] || 0) || 0;
+      if (min <= 0) return;
+      var data = dataPartida[pid] || '';
+      desempA3.push({ atleta_nome: nomeVolt, data: data, minutos: String(min) });
+    });
+
+    console.log('[A3] desempRows:', desempA3.length, 'jogos com minutos > 0');
+    if (desempA3.length > 0) console.log('[A3] exemplo:', JSON.stringify(desempA3[0]));
+    return desempA3;
+  } catch(e) {
+    console.error('[A3] FetchDesempenho falhou:', e.message);
+    return [];
+  }
+}
+
 
 var CARTOES_MOCK = [
   // Preencher com dados reais do campeonato:
@@ -1551,27 +1623,21 @@ async function iniciar() {
       return r['nome_nsp'] && (r['ativo'] || 'Sim').toLowerCase() !== 'n\u00e3o';
     });
     epiRows = parseCSV(get(6));
-    // ── A3: buscar Mapeamento para cartões ──────────────────────────
+    // ── A3: Mapeamento + Desempenho ─────────────────────────────────
     var mapeamentoA3M1 = await a3FetchMapeamento();
     cartoes = a3MapearCartoes(mapeamentoA3M1);
     if (!cartoes.length) {
       console.warn('[M1/A3] Mapeamento vazio — usando CARTOES_MOCK');
       cartoes = CARTOES_MOCK;
     } else {
-      console.log('[M1/A3] Mapeamento ativos:', cartoes.length);
+      console.log('[M1/A3] Cartoes mapeados:', cartoes.length);
     }
-    // Verificar Pos_Jogo 2026
-    (async function() {
-      var urlPJ = A3_BASE + encodeURIComponent('Pos_Jogo');
-      try {
-        var rPJ = await fetch(urlPJ);
-        if (rPJ.ok) {
-          var rowsPJ = a3CSV(await rPJ.text());
-          var t2026 = rowsPJ.filter(function(r){ return (r['temporada']||'').trim()==='2026'; });
-          console.log('[M1/A3] Pos_Jogo 2026:', t2026.length, '/', rowsPJ.length);
-        }
-      } catch(e) { console.warn('[M1/A3] Pos_Jogo falhou:', e.message); }
-    })();
+    // Buscar minutos do A3 e mesclar com desempRows
+    var desempA3 = await a3FetchDesempenhoPorAtleta(mapeamentoA3M1);
+    if (desempA3.length > 0) {
+      desempRows = desempA3.concat(desempRows);
+      console.log('[M1/A3] desempRows total após A3:', desempRows.length);
+    }
 
     console.log('[M1] Atletas no cadastro:', cadastro.length);
     processarDados(
