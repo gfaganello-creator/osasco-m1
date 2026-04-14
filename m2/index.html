@@ -376,93 +376,72 @@ function renderContexto(sc,pos,clinical){var scoreC=sc.score>=72?'var(--ok)':sc.
 
 var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
-var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
-var PROXY_URL  = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
-
-// ════════════════════════════════════════════════════════════════════
-// ARQUIVO 3 v6 — CONFIGURAÇÃO CENTRAL (P0)
-// ════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// ARQUIVO 3 — leitura do Mapeamento para cartões e status clínico
+// ═════════════════════════════════════════════════════════════════
 var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
 var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
 
-window.APP_CONTEXT = { temporada: '2026', ativosApenas: true };
-
-function a3NormalizeNome(n) {
-  return (n||'').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\./g,'').replace(/[^a-z\s]/g,'')
-    .replace(/\s+/g,' ').trim();
-}
-async function a3Fetch(aba) {
-  try {
-    var r = await fetch(A3_BASE + encodeURIComponent(aba));
-    if (!r.ok) throw new Error(r.status);
-    return a3ParseCSV(await r.text());
-  } catch(e) { console.warn('[A3] erro:', aba, e.message); return []; }
-}
-function a3ParseCSV(txt) {
-  if (!txt||!txt.trim()) return [];
-  var ls=txt.split('\n').filter(function(l){return l.trim();});
-  if (ls.length<2) return [];
-  function sp(line){var r=[],c='',q=false;for(var i=0;i<line.length;i++){var ch=line[i];if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c.replace(/^"|"$/g,'').trim());c='';}else{c+=ch;}}r.push(c.replace(/^"|"$/g,'').trim());return r;}
-  // Normalizar headers do Google Sheets: colunas protegidas chegam como
-  // "atleta_id ABA PROTEGIDA Gerenciada automaticamente..."
-  // Manter apenas a parte que forma um nome de campo válido (snake_case)
-  function normHeader(raw){
-    var s = String(raw || '')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-    var snakeMatches = s.match(/\b[a-z]+(?:_[a-z0-9]+)+\b/g) || [];
-    var blacklist = {aba:1,protegida:1,protegido:1,sheet:1,protected:1,nao:1,editar:1,manualmente:1,gerenciada:1,automaticamente:1,pelo:1,script:1,sincronizacao:1};
-    snakeMatches = snakeMatches.filter(function(x){ return !blacklist[x]; });
-    if (snakeMatches.length) return snakeMatches[0];
-    var simpleMatches = s.match(/\b[a-z][a-z0-9]*\b/g) || [];
-    simpleMatches = simpleMatches.filter(function(x){ return !blacklist[x]; });
-    return simpleMatches[0] || '';
-  }
-  var hs=sp(ls[0]).map(normHeader);
-  return ls.slice(1).map(function(l){var vs=sp(l),o={};hs.forEach(function(h,i){if(h) o[h]=(vs[i]||'').trim();});return o;});
-}
-function a3FiltrarTemporada(rows, campo) {
-  var t=(window.APP_CONTEXT||{}).temporada; if(!t) return rows;
-  var c=campo||'temporada';
-  return (rows||[]).filter(function(r){return !r[c]||r[c]===t;});
-}
-function a3BuildNspIndex(mapeamento) {
-  var idx={};
-  (mapeamento||[]).forEach(function(r){
-    if (!r.atleta_id) return;
-    // chave 1: nome_nsp completo normalizado  ("andrey ventura" → OS001)
-    if (r.nome_nsp) idx[a3NormalizeNome(r.nome_nsp)] = r.atleta_id;
-    // chave 2: nome_atleta completo normalizado
-    if (r.nome_atleta) idx[a3NormalizeNome(r.nome_atleta)] = r.atleta_id;
-    // chave 3: primeiro token do nome_nsp ("andrey" → OS001) — fallback para nomes curtos do VOLT
-    if (r.nome_nsp) {
-      var primeiro = a3NormalizeNome(r.nome_nsp).split(' ')[0];
-      if (primeiro && !idx[primeiro]) idx[primeiro] = r.atleta_id;
+function a3CSV(txt) {
+  if (!txt || !txt.trim()) return [];
+  var linhas = txt.split(/\r?\n/);
+  var hdr = linhas[0].split(',').map(function(h) { return h.replace(/^"|"$/g,'').trim(); });
+  var out = [];
+  for (var i = 1; i < linhas.length; i++) {
+    var cols = [], cur = '', inQ = false;
+    for (var c = 0; c < linhas[i].length; c++) {
+      var ch = linhas[i][c];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else cur += ch;
     }
-  });
-  return idx;
+    cols.push(cur);
+    var row = {};
+    hdr.forEach(function(h, idx) { row[h] = (cols[idx] || '').replace(/^"|"$/g, '').trim(); });
+    out.push(row);
+  }
+  return out;
 }
-function a3MinutosPorAtleta(posJogoRows) {
-  var acc={};
-  (posJogoRows||[]).forEach(function(r){
-    var id=r.atleta_id; if(!id) return;
-    var min=Number(r.minutos); if(isNaN(min)) min=0;
-    acc[id]=(acc[id]||0)+min;
-  });
-  return acc;
+
+async function a3FetchMapeamento() {
+  var url = A3_BASE + encodeURIComponent('Mapeamento');
+  console.log('[A3] fetch URL:', url.slice(0,100));
+  try {
+    var r = await fetch(url);
+    if (!r.ok) {
+      console.error('[A3] HTTP', r.status, r.statusText, '— planilha pública?');
+      return [];
+    }
+    var txt = await r.text();
+    if (!txt || txt.trim().length < 10) {
+      console.error('[A3] Resposta vazia — aba Mapeamento existe?');
+      return [];
+    }
+    var rows = a3CSV(txt);
+    console.log('[A3] Mapeamento:', rows.length, 'linhas recebidas');
+    if (rows.length > 0) console.log('[A3] Headers:', Object.keys(rows[0]).slice(0,8).join(', '));
+    if (rows.length > 0) console.log('[A3] 1 registro:', JSON.stringify(rows[0]).slice(0,200));
+    return rows;
+  } catch(e) { console.error('[A3] fetch falhou:', e.message); return []; }
 }
-// ── variáveis de runtime A3 (preenchidas em iniciarM2) ────────────
-var _a3NspIndex   = {};
-var _a3PorId      = {};
-var _a3MinutosMap = {};
-var _a3ObsRows    = [];
-var _a3PlanoRows  = [];
-// ── Fim Arquivo 3 v6 ─────────────────────────────────────────────
+
+function a3MapearCartoes(mapeamentoA3) {
+  return (mapeamentoA3 || []).map(function(r) {
+    var nome = (r['nome_nsp'] || r['nome_atleta'] || r['nome_volt'] || r['nome'] || '').trim();
+    if (!nome) return null;
+    var amars = parseInt(r['cartoes_amarelos'] || r['cartao_amarelo'] || r['amarelos'] || 0) || 0;
+    var verms = parseInt(r['cartoes_vermelhos'] || r['cartao_vermelho'] || r['vermelhos'] || 0) || 0;
+    var statusClin = (r['status_clinico'] || r['status_ativo'] || r['status'] || '').toLowerCase();
+    var decisao    = (r['decisao_comissao'] || r['decisao'] || '').toLowerCase();
+    var suspenso   = statusClin.includes('suspenso') || statusClin.includes('suspen')
+                  || decisao.includes('suspens') || verms > 0;
+    var pendurado  = !suspenso && amars >= 2;
+    return { nome: nome, amarelos: amars, vermelhos: verms, suspenso: suspenso, pendurado: pendurado };
+  }).filter(Boolean);
+}
+
+var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
+var PROXY_URL  = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
 var NSP_DATA     = null;
 var PROX_JOGO    = null;
 var epiRowsM2    = [];   // preenchido por iniciarM2
@@ -854,6 +833,14 @@ async function iniciarM2() {
     var get = function(i) {
       return results[i].status === 'fulfilled' ? results[i].value : '';
     };
+    // ── A3: buscar Mapeamento para cartões ──────────────────────────
+    var mapeamentoA3 = await a3FetchMapeamento();
+    var cartoesA3 = a3MapearCartoes(mapeamentoA3);
+    if (cartoesA3.length) {
+      console.log('[M2/A3] Mapeamento ativos:', cartoesA3.length);
+    } else {
+      console.warn('[M2/A3] Mapeamento vazio — verifique publicacao da planilha');
+    }
 
     var _nomes = ['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Mapeamento','Epidemiol\u00f3gico'];
     results.forEach(function(r, i) {
@@ -876,89 +863,23 @@ async function iniciarM2() {
     };
     epiRowsM2 = parseCSV(get(5));
 
-    // ── PATCHES 1+2: Arquivo 3 v6 (em paralelo, não bloqueia VOLT) ──
-    var a3Results = await Promise.allSettled([
-      a3Fetch('Mapeamento'),
-      a3Fetch('Pos_Jogo'),
-      a3Fetch('Observacoes_Comissao'),
-      a3Fetch('Plano_Desenvolvimento')
-    ]);
-    var a3Mapeamento = a3Results[0].status==='fulfilled' ? a3Results[0].value : [];
-    var a3PosJogo    = a3Results[1].status==='fulfilled' ? a3Results[1].value : [];
-    _a3ObsRows       = a3Results[2].status==='fulfilled' ? a3Results[2].value : [];
-    _a3PlanoRows     = a3Results[3].status==='fulfilled' ? a3Results[3].value : [];
-
-    _a3NspIndex   = a3BuildNspIndex(a3Mapeamento);
-    _a3PorId      = {};
-    a3Mapeamento.forEach(function(r){ if(r.atleta_id) _a3PorId[r.atleta_id]=r; });
-    // DIAGNÓSTICO: mostrar colunas reais da primeira linha do Mapeamento
-    if (a3Mapeamento.length > 0) {
-      console.log('[M2/A3] Colunas Mapeamento:', Object.keys(a3Mapeamento[0]).join(' | '));
-      console.log('[M2/A3] atleta_id[0]:', a3Mapeamento[0].atleta_id, '| nome_nsp[0]:', a3Mapeamento[0].nome_nsp);
-      // Mostrar quantos têm atleta_id e nome_nsp preenchidos
-      var comAmbos = a3Mapeamento.filter(function(r){ return r.atleta_id && r.nome_nsp; }).length;
-      console.log('[M2/A3] Linhas com atleta_id+nome_nsp:', comAmbos, '/', a3Mapeamento.length);
-    }
-    _a3MinutosMap = a3MinutosPorAtleta(a3FiltrarTemporada(a3PosJogo));
-    console.log('[M2/A3] Mapeamento:', a3Mapeamento.length,
-                '| nspIndex:', Object.keys(_a3NspIndex).length,
-                '| Obs:', _a3ObsRows.length, '| Plano:', _a3PlanoRows.length);
-    // ─────────────────────────────────────────────────────────────
-
     console.log('[M2] Cadastro:', NSP_DATA.cadastro.length, 'atletas');
-    console.log('[M2] A3 Mapeamento recebido:', a3Mapeamento.length, 'linhas');
-    console.log('[M2] _a3NspIndex entradas:', Object.keys(_a3NspIndex).length);
 
     var sel = document.getElementById('athlete-select');
     sel.innerHTML = '<option value="">-- Selecione um atleta --</option>';
-
-    var sorted = NSP_DATA.cadastro.slice()
-      .sort(function(a,b){ return a['Nome'].localeCompare(b['Nome'],'pt'); });
-
+    var sorted = NSP_DATA.cadastro.slice().sort(function(a, b) {
+      return a['Nome'].localeCompare(b['Nome'], 'pt');
+    });
     sorted.forEach(function(r) {
-      var id = null;
-      if (_a3NspIndex) {
-        id = _a3NspIndex[a3NormalizeNome(r['Nome'])] || null;
-      }
       var o = document.createElement('option');
-      o.value            = id || '';          // atleta_id real; vazio se não mapeado
-      o.dataset.atletaId = id || '';          // atleta_id explícito
-      o.dataset.nome     = r['Nome'];         // nome sempre disponível para VOLT
+      o.value = r['Nome'];
       o.textContent = r['Nome'] + (r['Nome Completo'] ? ' \u2014 ' + r['Nome Completo'] : '');
       sel.appendChild(o);
     });
 
-    var comId = sorted.filter(function(r){
-      return !!(_a3NspIndex && _a3NspIndex[a3NormalizeNome(r['Nome']||'')]);
-    }).length;
-    console.log('[M2] Options com atleta_id:', comId, '/', sorted.length);
-
     var params = new URLSearchParams(window.location.search);
-    var atletaIdFromUrl = params.get('atleta_id') || null;
-    var nomeFromUrl     = params.get('atleta') || params.get('nome') || null;
-
-    // Função auxiliar: selecionar option por atleta_id ou nome
-    function selecionarOption(id, nome) {
-      var opts = sel.querySelectorAll('option');
-      for (var i=0; i<opts.length; i++) {
-        if (id && opts[i].dataset.atletaId === id) { sel.value = opts[i].value; return true; }
-      }
-      for (var j=0; j<opts.length; j++) {
-        if (nome && a3NormalizeNome(opts[j].dataset.nome||'') === a3NormalizeNome(nome)) {
-          sel.value = opts[j].value; return true;
-        }
-      }
-      return false;
-    }
-
-    if (atletaIdFromUrl || nomeFromUrl) {
-      selecionarOption(atletaIdFromUrl, nomeFromUrl);
-    }
-    if (sel.value !== undefined && document.querySelector('option[value="'+sel.value+'"]')) {
-      carregarAtleta();
-    } else if (sel.selectedIndex > 0) {
-      carregarAtleta();
-    }
+    var nome = params.get('atleta');
+    if (nome) { sel.value = nome; carregarAtleta(); }
 
   } catch(err) {
     console.error('[M2] Erro ao carregar:', err.message);
@@ -977,120 +898,20 @@ async function iniciarM2() {
   }
 }
 
-// ── buildA3Panels — Patches 4, 6 e 7 ────────────────────────────
-function buildA3Panels(atletaId, posLabel, posCodigo, minutos, obsArr, plano) {
-  var h = '';
-
-  // P4 — Minutos na temporada
-  var minHtml = minutos !== null
-    ? '<strong style="font-size:18px;color:var(--accent)">' + minutos + '</strong><span style="font-size:12px;color:var(--ink3)"> min (2026)</span>'
-    : '<span style="color:var(--ink4)">—</span>';
-  var posHtml = posCodigo && posCodigo !== '—'
-    ? '<span style="font-family:var(--f-mono);font-size:11px;background:var(--s2);border:1px solid var(--s4);padding:2px 8px;border-radius:4px">' + posCodigo + '</span>'
-    : '';
-
-  h += '<div class="clin-wrap" style="margin-top:12px">'
-    + '<div class="clin-header"><span class="clin-title">Arquivo 3 \u2014 Dados da Temporada</span>' + posHtml + '</div>'
-    + '<div class="clin-grid">'
-    + '<div class="clin-section"><div class="clin-section-title">Minutos 2026</div>'
-    + '<div class="clin-row"><span class="clin-key">Temporada</span><span class="clin-val">' + minHtml + '</span></div>'
-    + '<div class="clin-row"><span class="clin-key">Posi\u00e7\u00e3o oficial</span><span class="clin-val">' + (posLabel||'\u2014') + '</span></div>'
-    + '</div>';
-
-  // P7 — Plano de desenvolvimento
-  if (plano) {
-    h += '<div class="clin-section"><div class="clin-section-title">Plano de Desenvolvimento</div>'
-      + (plano.meta_curto_prazo ? '<div class="clin-row"><span class="clin-key">Meta</span><span class="clin-val" style="max-width:200px;white-space:normal;line-height:1.4">' + plano.meta_curto_prazo + '</span></div>' : '')
-      + (plano.status_plano     ? '<div class="clin-row"><span class="clin-key">Status</span><span class="clin-val">' + plano.status_plano + '</span></div>' : '')
-      + '</div>';
-  }
-
-  h += '</div>'; // fecha clin-grid
-
-  // P6 — Observações da comissão (campos reais)
-  if (obsArr && obsArr.length) {
-    h += '<div style="margin-top:12px"><div class="clin-section-title" style="margin-bottom:8px">Observa\u00e7\u00f5es da Comiss\u00e3o</div>';
-    obsArr.forEach(function(obs) {
-      var prioColor = obs.prioridade==='Alta'?'var(--risk)':obs.prioridade==='M\u00e9dia'?'var(--warn)':'var(--ink3)';
-      h += '<div style="background:var(--s2);border:1px solid var(--s3);border-radius:6px;padding:10px 12px;margin-bottom:6px">'
-        + '<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-        +   '<span style="font-family:var(--f-mono);font-size:9px;font-weight:700;text-transform:uppercase;color:var(--ink3)">' + (obs.tipo_obs||'') + '</span>'
-        +   '<span style="font-family:var(--f-mono);font-size:9px;font-weight:600;color:' + prioColor + '">' + (obs.prioridade||'') + '</span>'
-        + '</div>'
-        + '<div style="font-size:12px;color:var(--ink2);line-height:1.5;margin-bottom:4px">' + (obs.observacao||'') + '</div>'
-        + (obs.acao_recomendada ? '<div style="font-size:11px;color:var(--accent);margin-top:3px">\u2192 ' + obs.acao_recomendada + '</div>' : '')
-        + (obs.status ? '<div style="font-family:var(--f-mono);font-size:9px;color:var(--ink4);margin-top:3px">Status: ' + obs.status + '</div>' : '')
-        + '</div>';
-    });
-    h += '</div>';
-  } else if (atletaId) {
-    h += '<div style="margin-top:8px;font-size:11px;color:var(--ink4)">Nenhuma observa\u00e7\u00e3o registrada.</div>';
-  }
-
-  h += '</div>'; // fecha clin-wrap
-  return h;
-}
-// ── Fim buildA3Panels ─────────────────────────────────────────────
+// ── RENDER ATHLETE ─────────────────────────────────────────────────
 function carregarAtleta() {
-  var sel    = document.getElementById('athlete-select');
-  var idx    = sel ? sel.selectedIndex : -1;
-  var selOpt = (idx > 0 && sel) ? sel.options[idx] : null;
-
-  // nome: sempre de dataset.nome (join VOLT)
-  var nome     = selOpt ? (selOpt.dataset.nome || selOpt.textContent.split(' \u2014 ')[0].trim()) : '';
-  // atleta_id: dataset.atletaId (join A3)
-  var atletaId = selOpt ? (selOpt.dataset.atletaId || null) : null;
-
-  if (!selOpt || !nome || !NSP_DATA) {
+  var nome = document.getElementById('athlete-select').value;
+  if (!nome||!NSP_DATA) {
     document.getElementById('m2-content').innerHTML = '<div class="state-screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="state-title">Selecione um atleta</div></div>';
     return;
   }
-
-  // Atualizar URL: atleta_id real quando disponível, nunca nome como atleta_id
-  if (history.replaceState) {
-    var url = new URL(window.location.href);
-    if (atletaId) {
-      url.searchParams.set('atleta_id', atletaId);
-    } else {
-      url.searchParams.delete('atleta_id');
-    }
-    url.searchParams.set('nome', nome);
-    url.searchParams.delete('atleta');
-    history.replaceState(null, '', url.toString());
-  }
-
   try {
-    // Joins VOLT usam nome_nsp (dataset.nome)
     var cad = NSP_DATA.cadastro.find(function(r){return r['Nome']===nome;})||{};
     var map = NSP_DATA.mapeamento.find(function(r){return r['nome_nsp']===nome;})||{};
     var sc  = calcScore(nome, NSP_DATA.recuperacao, NSP_DATA.preTreino, NSP_DATA.carga);
-
-    // atleta_id: do dataset (direto) → fallback normalização (último recurso)
-    if (!atletaId) {
-      atletaId = _a3NspIndex[a3NormalizeNome(nome)] || null;
-    }
-
-
-    // ── PATCH 5: posição oficial do Mapeamento A3 ─────────────────
-    var a3Data = atletaId ? (_a3PorId[atletaId]||null) : null;
-    var posicaoLabel  = (a3Data && a3Data.posicao_label)  || map['posicao_principal'] || cad['Posi\u00e7\u00e3o'] || '\u2014';
-    var posicaoCodigo = (a3Data && a3Data.posicao_codigo) || '\u2014';
-
-    // ── PATCH 4: minutos na temporada (Pos_Jogo = fonte oficial) ──
-    var minutosTotais = atletaId ? (_a3MinutosMap[atletaId] || 0) : null;
-
-    // ── PATCH 6: observações da comissão ──────────────────────────
-    var obsAtleta = atletaId
-      ? _a3ObsRows.filter(function(r){return r.atleta_id===atletaId;}).slice(-5).reverse()
-      : [];
-
-    // ── PATCH 7: plano de desenvolvimento ────────────────────────
-    var planoAtleta = atletaId
-      ? (_a3PlanoRows.find(function(r){return r.atleta_id===atletaId;})||null)
-      : null;
     // --- CAMADA CL\u00cdNICA + COMPETITIVA ---
     var clinical      = buildClinical(nome, epiRowsM2);
-    var disciplina    = buildDisciplina(nome, CARTOES_MOCK);
+    var disciplina    = buildDisciplina(nome, (typeof cartoesA3 !== 'undefined' && cartoesA3.length ? cartoesA3 : CARTOES_MOCK));
     var disponibilidade = calcDisponibilidade(clinical, disciplina);
 
     // Override decisao if blocked
@@ -1128,7 +949,7 @@ function carregarAtleta() {
     });
 
     var idade = calcularIdade(cad['Data de Nascimento']);
-    var pos   = posicaoLabel;  // P5: posição oficial do Mapeamento A3
+    var pos   = map['posicao_principal']||cad['Posi\u00e7\u00e3o']||'\u2014';
     var num   = map['numero_camisa']||cad['N\u00ba']||'';
     var scoreColor = sc.classe==='OK'?'var(--ok)':sc.classe==='Aten\u00e7\u00e3o'?'var(--warn)':'var(--risk)';
     var statusColor = sc.tipoStatus==='apronto'?'var(--ok)':sc.tipoStatus==='alerta'?'var(--warn)':'var(--risk)';
@@ -1285,11 +1106,9 @@ function carregarAtleta() {
 
     // --- PAINEL CL\u00cdNICO ---
     var clinHtml = buildClinicalPanel(clinical, disciplina, disponibilidade);
-    // --- PAINÉIS A3 v6 (P4 minutos + P6 observações + P7 plano) ---
-    var a3Html = buildA3Panels(atletaId, posicaoLabel, posicaoCodigo, minutosTotais, obsAtleta, planoAtleta);
     requestAnimationFrame(function(){
       var el = document.getElementById('m2-content');
-      if(el){ var d=document.createElement('div'); d.innerHTML=clinHtml+a3Html; el.appendChild(d); }
+      if(el){ var d=document.createElement('div'); d.innerHTML=clinHtml; el.appendChild(d); }
     });
     requestAnimationFrame(function() {
       drawLineChart('chart-score', [{
