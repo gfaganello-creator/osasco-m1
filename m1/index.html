@@ -1156,13 +1156,13 @@ function calcularScore(atletaNome, { recuperacao, preTreino, carga }, desempRows
 
 
   // -- CLASSIFICA\u00C7\u00C3O --------------------------------------------
-  let classe;
+  var classe;
   if (tipoStatus === 'reab') classe = 'Risco';
   else if (score >= 72)      classe = 'OK';
   else if (score >= 48)      classe = 'Aten\u00E7\u00E3o';
   else                       classe = 'Risco';
 
-  let decisao;
+  var decisao;
   if (classe === 'Risco')        decisao = 'N\u00E3o escalar';
   else if (classe === 'Aten\u00E7\u00E3o') decisao = dpj <= 2 ? 'Gerir min \u2014 troca 70min' : 'Monitorar treino';
   else                           decisao = dpj === 1 ? 'Ativa\u00E7\u00E3o leve' : 'Pronto 90min';
