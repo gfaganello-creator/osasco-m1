@@ -376,32 +376,26 @@ function renderContexto(sc,pos,clinical){var scoreC=sc.score>=72?'var(--ok)':sc.
 
 var NSP_SID    = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
 var EPI_SID    = '1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo';
-// ═════════════════════════════════════════════════════════════════
-// ARQUIVO 3 — integração completa (fix linha de proteção + temporada)
-// ═════════════════════════════════════════════════════════════════
 var A3_SID  = '1-kzcz8P8WQYwkBk4lvoUM_AX1875Xko1_tjPqjDXrWQ';
 var A3_BASE = 'https://docs.google.com/spreadsheets/d/' + A3_SID + '/gviz/tq?tqx=out:csv&sheet=';
 
 function a3CSV(txt) {
-  // Parse CSV pulando automaticamente linhas de aviso/proteção
   if (!txt || !txt.trim()) return [];
   var linhas = txt.split(/\r?\n/).filter(function(l){ return l.trim(); });
-  if (!linhas.length) return [];
-
-  // Detectar linha de headers: pular linhas de aviso (contêm PROTEGIDA, EDITAR, ⚠)
-  var hdrIdx = 0;
-  for (var i = 0; i < Math.min(linhas.length, 5); i++) {
-    var l = linhas[i];
-    if (l.indexOf('PROTEGIDA') >= 0 || l.indexOf('EDITAR MANUALMENTE') >= 0 || l.indexOf('\u26a0') >= 0) {
-      continue;
+  var hdrIdx = -1;
+  var KEYS = ['atleta_id','nome_atleta','partida_id','treino_id','obs_id','semana_id'];
+  for (var i = 0; i < Math.min(linhas.length, 10); i++) {
+    var ll = linhas[i].toLowerCase();
+    for (var k = 0; k < KEYS.length; k++) {
+      if (ll.indexOf(KEYS[k]) >= 0) { hdrIdx = i; break; }
     }
-    hdrIdx = i;
-    break;
+    if (hdrIdx >= 0) break;
   }
-
-  var hdr = linhas[hdrIdx].split(',').map(function(h) { return h.replace(/^"|"$/g,'').trim(); });
+  if (hdrIdx < 0) return [];
+  var hdr = linhas[hdrIdx].split(',').map(function(h){ return h.replace(/^"|"$/g,'').trim(); });
   var out = [];
   for (var i = hdrIdx + 1; i < linhas.length; i++) {
+    if (!linhas[i].trim()) continue;
     var cols = [], cur = '', inQ = false;
     for (var c = 0; c < linhas[i].length; c++) {
       var ch = linhas[i][c];
@@ -411,7 +405,7 @@ function a3CSV(txt) {
     }
     cols.push(cur);
     var row = {};
-    hdr.forEach(function(h, idx) { row[h] = (cols[idx] || '').replace(/^"|"$/g, '').trim(); });
+    hdr.forEach(function(h, idx) { row[h] = (cols[idx]||'').replace(/^"|"$/g,'').trim(); });
     out.push(row);
   }
   return out;
@@ -422,32 +416,78 @@ async function a3FetchMapeamento() {
   console.log('[A3] fetch Mapeamento:', url.slice(0,90));
   try {
     var r = await fetch(url);
-    if (!r.ok) { console.error('[A3] HTTP', r.status, '— planilha pública?'); return []; }
-    var rows = a3CSV(await r.text());
+    if (!r.ok) { console.error('[A3] HTTP', r.status); return []; }
+    var txt = await r.text();
+
+    // Mapeamento NAO tem linha de headers — parsear por posicao fixa
+    // Linha 0 = aviso de protecao (pular), linhas seguintes = dados
+    // col0=atleta_id, col1=nome_atleta, col2=nome_nsp, col3=nome_volt,
+    // col4=nome_completo, col5=posicao_label, col6=posicao_codigo,
+    // col7=data_nasc, col8=data_entrada, col9=temp_entrada,
+    // col10=status_ativo, col11=status_clinico, col12=decisao_comissao,
+    // col13=cartoes_amarelos, col14=cartoes_vermelhos, col15=origem, col16=grupo
+    var linhas = txt.split(/\r?\n/).filter(function(l){ return l.trim(); });
+    var rows = [];
+    for (var i = 0; i < linhas.length; i++) {
+      var l = linhas[i];
+      if (l.indexOf('PROTEGIDA') >= 0 || l.indexOf('\u26d4') >= 0 || l.indexOf('\u26a0') >= 0) continue;
+      var cols = [], cur = '', inQ = false;
+      for (var c = 0; c < l.length; c++) {
+        var ch = l[c];
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      cols.push(cur.trim());
+      if (cols.length < 3 || !cols[0]) continue;
+      rows.push({
+        atleta_id:        cols[0]  || '',
+        nome_atleta:      cols[1]  || '',
+        nome_nsp:         cols[2]  || '',
+        nome_volt:        cols[3]  || '',
+        nome_completo:    cols[4]  || '',
+        posicao_label:    cols[5]  || '',
+        posicao_codigo:   cols[6]  || '',
+        data_nascimento:  cols[7]  || '',
+        data_entrada:     cols[8]  || '',
+        temporada_entrada:cols[9]  || '',
+        status_ativo:     cols[10] || '',
+        status_clinico:   cols[11] || '',
+        decisao_comissao: cols[12] || '',
+        cartoes_amarelos: cols[13] || '0',
+        cartoes_vermelhos:cols[14] || '0',
+        origem:           cols[15] || '',
+        grupo_cenario:    cols[16] || ''
+      });
+    }
     console.log('[A3] Mapeamento:', rows.length, 'registros');
-    if (rows.length > 0) console.log('[A3] Headers reais:', Object.keys(rows[0]).slice(0,6).join(', '));
-    if (rows.length > 0) console.log('[A3] 1 nome_nsp:', rows[0]['nome_nsp'] || rows[0]['nome_atleta'] || '(vazio)');
+    if (rows.length > 0) {
+      console.log('[A3] 1 nome_nsp:', rows[0]['nome_nsp']);
+      console.log('[A3] 1 status_clinico:', rows[0]['status_clinico']);
+      var susps = rows.filter(function(r){ return (r['status_clinico']||'').toLowerCase().indexOf('suspenso') >= 0; });
+      var pends = rows.filter(function(r){ return parseInt(r['cartoes_amarelos']||0) >= 2; });
+      console.log('[A3] Suspensos:', susps.length, '| Pendurados:', pends.length);
+    }
     return rows;
-  } catch(e) { console.error('[A3] fetch falhou:', e.message); return []; }
+  } catch(e) { console.error('[A3] erro:', e.message); return []; }
 }
 
 function a3MapearCartoes(mapeamentoA3) {
   return (mapeamentoA3 || []).map(function(r) {
-    var nome = (r['nome_nsp'] || r['nome_atleta'] || r['nome_volt'] || r['nome'] || '').trim();
+    var nome = (r['nome_nsp'] || r['nome_atleta'] || r['nome_volt'] || '').trim();
     if (!nome) return null;
-    var amars = parseInt(r['cartoes_amarelos'] || r['cartao_amarelo'] || r['amarelos'] || 0) || 0;
-    var verms = parseInt(r['cartoes_vermelhos'] || r['cartao_vermelho'] || r['vermelhos'] || 0) || 0;
-    var statusClin = (r['status_clinico'] || r['status_ativo'] || r['status'] || '').toLowerCase();
-    var decisao    = (r['decisao_comissao'] || r['decisao'] || '').toLowerCase();
-    var suspenso   = statusClin.includes('suspenso') || statusClin.includes('suspen')
-                  || decisao.includes('suspens') || verms > 0;
+    var amars = parseInt(r['cartoes_amarelos'] || r['amarelos'] || 0) || 0;
+    var verms = parseInt(r['cartoes_vermelhos'] || r['vermelhos'] || 0) || 0;
+    var statusClin = (r['status_clinico'] || r['status_ativo'] || '').toLowerCase();
+    var decisao    = (r['decisao_comissao'] || '').toLowerCase();
+    var suspenso   = statusClin.indexOf('suspenso') >= 0 || statusClin.indexOf('suspen') >= 0
+                  || decisao.indexOf('suspens') >= 0 || verms > 0;
     var pendurado  = !suspenso && amars >= 2;
     return { nome: nome, amarelos: amars, vermelhos: verms, suspenso: suspenso, pendurado: pendurado };
   }).filter(Boolean);
 }
 
 async function a3FetchDesempenhoPorAtleta(mapeamentoA3) {
-  // Lê Pos_Jogo + Partidas e retorna [{atleta_nome, data, minutos}] para o M1
   var urlPJ = A3_BASE + encodeURIComponent('Pos_Jogo');
   var urlPt = A3_BASE + encodeURIComponent('Partidas');
   try {
@@ -457,38 +497,24 @@ async function a3FetchDesempenhoPorAtleta(mapeamentoA3) {
     ]);
     var posJogo  = a3CSV(results[0]);
     var partidas = a3CSV(results[1]);
-
-    // Mapear partida_id → data (col1 do Partidas = data no formato DD/MM/YYYY)
     var dataPartida = {};
     partidas.forEach(function(p) {
-      var pid  = (p['partida_id'] || p['id'] || '').trim();
-      // Col1 pode ser 'temporada' (nome do header) mas valor = data DD/MM/YYYY
-      var data = '';
-      var keys = Object.keys(p);
-      if (keys.length > 1) {
-        var v1 = p[keys[1]] || '';
-        // Detectar se parece data DD/MM/YYYY
-        if (/\d{2}\/\d{2}\/\d{4}/.test(v1)) data = v1;
-        else data = p['data'] || p['data_jogo'] || v1;
+      var pid = (p['partida_id'] || p['id'] || '').trim();
+      var data = (p['data'] || '').trim();
+      if (!data) {
+        Object.values(p).forEach(function(v) {
+          if (!data && /^\d{2}\/\d{2}\/\d{4}$/.test((v||'').trim())) data = v.trim();
+        });
       }
       if (pid && data) dataPartida[pid] = data;
     });
-
-    console.log('[A3] Partidas:', partidas.length, '| datas mapeadas:', Object.keys(dataPartida).length);
-    if (partidas.length > 0) {
-      console.log('[A3] Partidas col0-3:', Object.keys(partidas[0]).slice(0,4).join(', '));
-      console.log('[A3] Partidas 1a linha:', JSON.stringify(partidas[0]).slice(0,120));
-    }
-
-    // Mapear atleta_id → nome_nsp
+    console.log('[A3] Partidas:', partidas.length, '| datas:', Object.keys(dataPartida).length);
     var idParaNome = {};
     (mapeamentoA3 || []).forEach(function(r) {
       var aid  = (r['atleta_id'] || '').trim();
       var nome = (r['nome_nsp'] || r['nome_atleta'] || '').trim();
       if (aid && nome) idParaNome[aid] = nome;
     });
-
-    // Construir array de desempenho
     var desempA3 = [];
     posJogo.forEach(function(pj) {
       var pid  = (pj['partida_id'] || '').trim();
@@ -501,16 +527,11 @@ async function a3FetchDesempenhoPorAtleta(mapeamentoA3) {
       var data = dataPartida[pid] || '';
       desempA3.push({ atleta_nome: nomeVolt, data: data, minutos: String(min) });
     });
-
-    console.log('[A3] desempRows:', desempA3.length, 'jogos com minutos > 0');
+    console.log('[A3] desempRows:', desempA3.length);
     if (desempA3.length > 0) console.log('[A3] exemplo:', JSON.stringify(desempA3[0]));
     return desempA3;
-  } catch(e) {
-    console.error('[A3] FetchDesempenho falhou:', e.message);
-    return [];
-  }
+  } catch(e) { console.error('[A3] FetchDesemp falhou:', e.message); return []; }
 }
-
 
 var DESEMP_SID = '1takABb_h25adZIg6i9CmhTeidtUUmQHSHoAv_C6Vfmk';
 var PROXY_URL  = 'https://script.google.com/macros/s/AKfycbwNtVJ3A91nM2yQaQ3gbjIslceibU5ZWQv6wrizHcwYIlFDB1N9IXpbnt_bQnbQk-aM4w/exec';
@@ -905,14 +926,9 @@ async function iniciarM2() {
     var get = function(i) {
       return results[i].status === 'fulfilled' ? results[i].value : '';
     };
-    // ── A3: Mapeamento ───────────────────────────────────────────
     var mapeamentoA3 = await a3FetchMapeamento();
     var cartoesA3 = a3MapearCartoes(mapeamentoA3);
-    if (cartoesA3.length) {
-      console.log('[M2/A3] Cartoes mapeados:', cartoesA3.length);
-    } else {
-      console.warn('[M2/A3] Mapeamento vazio');
-    }
+    console.log('[M2/A3] Cartoes:', cartoesA3.length);
 
     var _nomes = ['Cadastro','Recupera\u00e7\u00e3o','Pr\u00e9Treino','Carga','Mapeamento','Epidemiol\u00f3gico'];
     results.forEach(function(r, i) {
