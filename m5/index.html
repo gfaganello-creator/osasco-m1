@@ -1742,8 +1742,9 @@ function a3PopularDecisoes(jogo, escalacao, relacionados, mapeamento, dadosAtlet
     if(!nomev) return;
     var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
     if(!found) return;
-    var tipo = a3Campo(r,['tipo','type','posicao_escalacao','role','funcao']).toLowerCase();
-    if(tipo.indexOf('titular')>=0 || tipo==='t' || tipo==='1') newDecisoes[found.nome]='titular';
+    // Header real da planilha: 'titular' com valores 'Titular'/'Banco'
+    var tipo = a3Campo(r,['titular','tipo','type','posicao_escalacao','role','funcao']).toLowerCase();
+    if(tipo==='titular' || tipo.indexOf('titular')>=0 || tipo==='t' || tipo==='1') newDecisoes[found.nome]='titular';
     else newDecisoes[found.nome]='banco';
   });
 
@@ -1761,10 +1762,11 @@ function a3PopularDecisoes(jogo, escalacao, relacionados, mapeamento, dadosAtlet
     var found = dadosAtletas.find(function(a){ return a3NormNome(a.nome)===a3NormNome(nomev); });
     if(!found) return;
     if(!newDecisoes[found.nome]){
-      var status = a3Campo(r,['status','situacao','disponibilidade']).toLowerCase();
-      var rel = a3Campo(r,['relacionado','relacionado_sn','in_list']);
-      // Se explicitamente não relacionado ou fora
-      if(rel==='N'||status.indexOf('fora')>=0||status.indexOf('suspen')>=0||status.indexOf('ausente')>=0){
+      // Header real: 'situacao' com valores 'Titular','Banco','Lesão','Fora','Suspenso'
+      var situacao = a3Campo(r,['situacao','status','disponibilidade']).toLowerCase();
+      if(situacao==='titular') { newDecisoes[found.nome]='titular'; }
+      else if(situacao==='banco') { newDecisoes[found.nome]='banco'; }
+      else if(situacao.indexOf('fora')>=0 || situacao.indexOf('suspen')>=0 || situacao.indexOf('les')>=0 || situacao.indexOf('ausente')>=0) {
         newDecisoes[found.nome] = 'fora';
       } else {
         newDecisoes[found.nome] = 'banco';
