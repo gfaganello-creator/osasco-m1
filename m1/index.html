@@ -1660,6 +1660,20 @@ async function iniciar() {
       console.log('[M1/A3] desempRows total:', desempRows.length);
     }
 
+    // Enriquecer mapeamento DESEMP com posicao_label do A3 Mapeamento
+    if (mapeamentoA3M1.length > 0) {
+      mapeamento.forEach(function(m) {
+        var nsp = (m.nome_nsp || '').trim().toLowerCase();
+        var a3row = mapeamentoA3M1.find(function(r) {
+          return (r.nome_nsp || '').trim().toLowerCase() === nsp;
+        });
+        if (a3row && a3row.posicao_label) {
+          m.posicao_principal = a3row.posicao_label;
+        }
+      });
+      console.log('[M1/A3] Posições enriquecidas do Mapeamento A3');
+    }
+
     console.log('[M1] Atletas no cadastro:', cadastro.length);
     processarDados(
       { cadastro: cadastro, recuperacao: recuperacao, preTreino: preTreino, carga: cargaRows },
