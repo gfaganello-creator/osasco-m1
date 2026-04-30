@@ -1839,7 +1839,36 @@ async function iniciarM5(){
     _a3Partidas     = a3ParseCSV(get(7));
     _a3Escalacao    = a3ParseCSV(get(8));
     _a3Relacionados = a3ParseCSV(get(9));
-    _a3Mapeamento   = a3ParseCSV(get(10));
+    // Mapeamento has no CSV headers (row 0 = protection label) - parse by position
+    // col0=atleta_id, col1=nome_atleta, col2=nome_nsp, col5=posicao_label
+    _a3Mapeamento = (function(txt) {
+      if (!txt || !txt.trim()) return [];
+      var linhas = txt.split(/
+?
+/);
+      var out = [];
+      for (var i = 1; i < linhas.length; i++) {
+        var ln = linhas[i];
+        if (!ln.trim()) continue;
+        var cols = [], cur = '', inQ = false;
+        for (var c = 0; c < ln.length; c++) {
+          var ch = ln[c];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+          else cur += ch;
+        }
+        cols.push(cur);
+        var clean = function(s){ return (s||'').replace(/^"|"$/g,'').trim(); };
+        if (!clean(cols[0])) continue;
+        out.push({
+          atleta_id:     clean(cols[0]),
+          nome_atleta:   clean(cols[1]),
+          nome_nsp:      clean(cols[2]),
+          posicao_label: clean(cols[5])
+        });
+      }
+      return out;
+    })(get(10));
 
     // LOG DIAGN\u00d3STICO
     console.log('[M5/Partidas] linhas brutas:', _a3Partidas.length);
