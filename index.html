@@ -106,6 +106,15 @@ body{font-family:var(--f-body);background:var(--surface);color:var(--ink);min-he
 .sheet-desc{font-size:10px;color:var(--ink3);margin-top:2px;}
 /* FOOTER */
 .footer{border-top:1px solid var(--s3);padding:20px 24px;text-align:center;font-family:var(--f-mono);font-size:10px;color:var(--ink4);letter-spacing:.5px;}
+
+.sheet-card.gps-card { border-color:#534AB7; }
+.sheet-card.gps-card .sheet-icon svg { stroke:#534AB7; }
+.sheet-card.gps-card:hover { border-color:#7F77DD; box-shadow:0 2px 12px rgba(83,74,183,.2); }
+.sheet-card.gps-card .gps-badge {
+  display:inline-block; font-size:9px; font-weight:600; letter-spacing:.5px;
+  text-transform:uppercase; background:#534AB7; color:#fff;
+  border-radius:4px; padding:2px 7px; margin-left:8px;
+}
 </style>
 </head>
 <body>
@@ -223,6 +232,13 @@ body{font-family:var(--f-body);background:var(--surface);color:var(--ink);min-he
     <a class="sheet-card" href="https://docs.google.com/spreadsheets/d/1zAE3Z04cpdVrdysAIyKu0xmjjOQkbIHgUD_KDIqNVZo" target="_blank">
       <div class="sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
       <div><div class="sheet-name">Epidemiol&oacute;gico</div><div class="sheet-desc">Controle de les&otilde;es e afastamentos</div></div>
+    </a>
+    <a class="sheet-card gps-card" href="https://drive.google.com/drive/folders/1vXL99UWe1Pk79ppZpiyxdsENe-YzrVkX" target="_blank">
+      <div class="sheet-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div>
+        <div class="sheet-name">GPS Polar — Importar Sessão <span class="gps-badge">UPLOAD</span></div>
+        <div class="sheet-desc">Solte o ZIP do Polar Team Pro aqui para importar automaticamente</div>
+      </div>
     </a>
   </div>
 
