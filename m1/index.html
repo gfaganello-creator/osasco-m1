@@ -1660,18 +1660,29 @@ async function iniciar() {
       console.log('[M1/A3] desempRows total:', desempRows.length);
     }
 
-    // Enriquecer mapeamento DESEMP com posicao_label do A3 Mapeamento
+    // Usar A3 Mapeamento para posicao_principal (cobre todos os 39 atletas)
+    // O DESEMP Mapeamento tem apenas atletas antigos; A3 Mapeamento tem o elenco completo
     if (mapeamentoA3M1.length > 0) {
-      mapeamento.forEach(function(m) {
-        var nsp = (m.nome_nsp || '').trim().toLowerCase();
-        var a3row = mapeamentoA3M1.find(function(r) {
-          return (r.nome_nsp || '').trim().toLowerCase() === nsp;
-        });
-        if (a3row && a3row.posicao_label) {
-          m.posicao_principal = a3row.posicao_label;
+      // Merge: adicionar ao mapeamento DESEMP os atletas que estão só no A3
+      var nspNoDesp = {};
+      mapeamento.forEach(function(m) { nspNoDesp[(m.nome_nsp||'').trim().toLowerCase()] = true; });
+      mapeamentoA3M1.forEach(function(r) {
+        var nsp = (r.nome_nsp || '').trim();
+        var nspLow = nsp.toLowerCase();
+        if (nsp) {
+          // Se já existe no DESEMP mapeamento, apenas enriquece posicao
+          var existing = mapeamento.find(function(m) {
+            return (m.nome_nsp||'').trim().toLowerCase() === nspLow;
+          });
+          if (existing) {
+            if (r.posicao_label) existing.posicao_principal = r.posicao_label;
+          } else {
+            // Adicionar atleta novo que só está no A3
+            mapeamento.push({ nome_nsp: nsp, posicao_principal: r.posicao_label || '—', ativo: 'Sim' });
+          }
         }
       });
-      console.log('[M1/A3] Posições enriquecidas do Mapeamento A3');
+      console.log('[M1/A3] Mapeamento enriquecido:', mapeamento.length, 'atletas');
     }
 
     console.log('[M1] Atletas no cadastro:', cadastro.length);
