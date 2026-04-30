@@ -940,9 +940,7 @@ function importarEscalacaoM5() {
     // col0=atleta_id, col1=nome_atleta, col2=nome_nsp, col5=posicao_label
     var a3Mapea = (function(txt) {
       if (!txt || !txt.trim()) return [];
-      var linhas = txt.split(/
-?
-/);
+      var linhas = txt.split(/\r?\n/);
       var out = [];
       for (var i = 1; i < linhas.length; i++) {
         var ln = linhas[i];
