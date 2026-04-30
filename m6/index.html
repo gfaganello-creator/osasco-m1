@@ -899,6 +899,16 @@ function a3SelecionarPartidaRecente(partidas){
 }
 
 // ── Importar escalação do A3 ─────────────────────────────────────
+
+function a3Campo_M6(row, aliases) {
+  // Lê campo de uma row com múltiplos aliases — resiliente a nomes de header diferentes
+  for (var i = 0; i < aliases.length; i++) {
+    var v = row[aliases[i]];
+    if (v !== undefined && v !== null && (v + '').trim() !== '') return (v + '').trim();
+  }
+  return '';
+}
+
 function importarEscalacaoM5() {
   var NSP_SID_LOCAL = '1O1Mx6wbrd1pGNpim0-OnWcymwqIuUKbrLBA8GipoF28';
   setSyncState('loading', 'Carregando elenco e jogo\u2026');
@@ -926,7 +936,36 @@ function importarEscalacaoM5() {
     var a3Partidas  = a3ParseCSV_M6(txtPartidas);
     var a3Relac     = a3ParseCSV_M6(txtRelac);
     var a3PosJogo   = a3ParseCSV_M6(txtPosJogo);
-    var a3Mapea     = a3ParseCSV_M6(txtMapea);
+    // Mapeamento has no CSV headers (row 0 = protecao label) - parse by position
+    // col0=atleta_id, col1=nome_atleta, col2=nome_nsp, col5=posicao_label
+    var a3Mapea = (function(txt) {
+      if (!txt || !txt.trim()) return [];
+      var linhas = txt.split(/
+?
+/);
+      var out = [];
+      for (var i = 1; i < linhas.length; i++) {
+        var ln = linhas[i];
+        if (!ln.trim()) continue;
+        var cols = [], cur = '', inQ = false;
+        for (var c = 0; c < ln.length; c++) {
+          var ch = ln[c];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+          else cur += ch;
+        }
+        cols.push(cur);
+        var clean = function(s){ return (s||'').replace(/^"|"$/g,'').trim(); };
+        if (!clean(cols[0])) continue;
+        out.push({
+          atleta_id:     clean(cols[0]),
+          nome_atleta:   clean(cols[1]),
+          nome_nsp:      clean(cols[2]),
+          posicao_label: clean(cols[5])
+        });
+      }
+      return out;
+    })(txtMapea);
 
     console.log('[M6/Partidas] linhas brutas:', a3Partidas.length);
     console.log('[M6/Relacionados] linhas brutas:', a3Relac.length);
@@ -937,11 +976,17 @@ function importarEscalacaoM5() {
 
     // Atualizar objeto jogo com dados reais
     if(_a3PartidaAtiva){
-      jogo.adversario = _a3PartidaAtiva['adversario']||_a3PartidaAtiva['opponent']||jogo.adversario;
+      // Compute adversario from mandante/visitante/mando (A3 Partidas schema)
+      var mando = (_a3PartidaAtiva['mando']||'').toLowerCase();
+      var adversarioCalculado = mando === 'fora'
+        ? (_a3PartidaAtiva['mandante'] || _a3PartidaAtiva['adversario'] || _a3PartidaAtiva['opponent'] || jogo.adversario)
+        : (_a3PartidaAtiva['visitante'] || _a3PartidaAtiva['adversario'] || _a3PartidaAtiva['opponent'] || jogo.adversario);
+      jogo.adversario = adversarioCalculado || jogo.adversario;
       jogo.data       = _a3PartidaAtiva['data']||jogo.data;
       jogo.competicao = _a3PartidaAtiva['competicao']||_a3PartidaAtiva['competition']||jogo.competicao;
-      var gp = parseInt(_a3PartidaAtiva['gols_pro']||_a3PartidaAtiva['gols_casa']||0);
-      var gc = parseInt(_a3PartidaAtiva['gols_contra']||_a3PartidaAtiva['gols_visitante']||0);
+      // A3 Partidas uses gols_osasco / gols_adversario
+      var gp = parseInt(_a3PartidaAtiva['gols_osasco']||_a3PartidaAtiva['gols_pro']||_a3PartidaAtiva['gols_casa']||0);
+      var gc = parseInt(_a3PartidaAtiva['gols_adversario']||_a3PartidaAtiva['gols_contra']||_a3PartidaAtiva['gols_visitante']||0);
       if(!isNaN(gp)) jogo.golsPro     = gp;
       if(!isNaN(gc)) jogo.golsContra  = gc;
       if(gp>gc) jogo.resultado='v'; else if(gp===gc) jogo.resultado='e'; else jogo.resultado='d';
@@ -1040,13 +1085,20 @@ function setSyncState(tipo, txt) {
 }
 
 // ── Jogo header ─────────────────────────────────────────────────
+function dataBRparaISO(dataBR) {
+  if (!dataBR) return '';
+  var p = dataBR.split('/');
+  return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : dataBR;
+}
+
 function renderJogoHeader() {
   var el = document.getElementById('jogo-adv-label');
   if (el) el.textContent = 'vs ' + jogo.adversario;
   var el2 = document.getElementById('jogo-info-label');
   if (el2) {
-    var dataStr = jogo.data
-      ? new Date(jogo.data + 'T00:00:00').toLocaleDateString('pt-BR', {weekday:'short',day:'numeric',month:'short'})
+    var dataISO = dataBRparaISO(jogo.data);
+    var dataStr = dataISO
+      ? new Date(dataISO + 'T00:00:00').toLocaleDateString('pt-BR', {weekday:'short',day:'numeric',month:'short'})
       : '';
     el2.textContent = jogo.competicao + (dataStr ? ' \u00b7 ' + dataStr : '');
   }
@@ -1054,8 +1106,9 @@ function renderJogoHeader() {
   // Populate status pills
   var dataPill = document.getElementById('jogo-data-pill');
   if (dataPill) {
-    dataPill.textContent = jogo.data
-      ? new Date(jogo.data + 'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'})
+    var dataISO2 = dataBRparaISO(jogo.data);
+    dataPill.textContent = dataISO2
+      ? new Date(dataISO2 + 'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'})
       : 'sem data';
   }
   var compPill = document.getElementById('jogo-comp-pill');
